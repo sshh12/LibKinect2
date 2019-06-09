@@ -91,11 +91,18 @@ class Kinect2:
             return depth_ary
         return None
 
+    def _process_bodies(self, body_ary, joint_ary):
+        bodies = []
+        for i in range(MAX_BODIES):
+            if body_ary[i, 0]:
+                bodies.append(Body(i, body_ary[i], joint_ary[i]))
+        return bodies
+
     def get_bodies(self):
         body_ary = np.empty((MAX_BODIES, BODY_PROPS), np.uint8)
         joint_ary = np.empty((MAX_BODIES, MAX_JOINTS, JOINT_PROPS), np.int32)
         if kinectDLL.get_body_data(body_ary, joint_ary):
-            return body_ary, joint_ary
+            return self._process_bodies(body_ary, joint_ary)
         return None
 
     def _process_audio(self, frame_cnt, audio_ary, meta_ary):
@@ -114,3 +121,17 @@ class Kinect2:
         if frame_cnt:
             return self._process_audio(frame_cnt, audio_ary, meta_ary)
         return []
+
+
+class Body:
+
+    def __init__(self, idx, body_ary, joint_ary):
+        self.idx = idx
+        self.tracked = body_ary[0]
+
+    def __repr__(self):
+        if self.tracked:
+            state = ' [Tracked]'
+        else:
+            state = ''
+        return '<Body ({}){}>'.format(self.idx, state)
