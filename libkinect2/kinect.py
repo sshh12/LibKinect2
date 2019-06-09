@@ -3,16 +3,20 @@ import numpy as np
 import ctypes
 
 
-F_SENSOR_COLOR = 0x00000001
-F_SENSOR_DEPTH = 0x00000010
-F_SENSOR_IR    = 0x00000100
-COLOR_WIDTH    = 1920
-COLOR_HEIGHT   = 1080
-COLOR_CHANNELS = 4
-DEPTH_WIDTH    = 512
-DEPTH_HEIGHT   = 424
-IR_WIDTH       = 512
-IR_HEIGHT      = 424
+F_SENSOR_COLOR  = 0x00000001
+F_SENSOR_DEPTH  = 0x00000010
+F_SENSOR_IR     = 0x00000100
+F_SENSOR_AUDIO  = 0x00001000
+COLOR_WIDTH     = 1920
+COLOR_HEIGHT    = 1080
+COLOR_CHANNELS  = 4
+DEPTH_WIDTH     = 512
+DEPTH_HEIGHT    = 424
+IR_WIDTH        = 512
+IR_HEIGHT       = 424
+MAX_SUBFRAMES   = 8
+SUBFRAME_SIZE   = 256
+
 
 kinectDLL = ctypes.cdll.LoadLibrary(resource_filename(__name__, 'data/Kinect2-API.dll'))
 
@@ -31,16 +35,25 @@ kinectDLL.get_ir_data.restype = ctypes.c_bool
 kinectDLL.get_depth_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16), ctypes.c_bool]
 kinectDLL.get_depth_data.restype = ctypes.c_bool
 
+kinectDLL.get_audio_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.float32), ctypes.c_bool]
+kinectDLL.get_audio_data.restype = ctypes.c_bool
+
+
 class Kinect2:
 
-    def __init__(self, use_color=True, use_depth=True, use_ir=True):
+    def __init__(self, disable_sensors=[]):
         self.sensor_flags = 0
-        if use_color:
+        if 'color' not in disable_sensors:
             self.sensor_flags |= F_SENSOR_COLOR
-        if use_depth:
+        if 'depth' not in disable_sensors:
             self.sensor_flags |= F_SENSOR_DEPTH
-        if use_ir:
+        if 'ir' not in disable_sensors:
             self.sensor_flags |= F_SENSOR_IR
+        if 'audio' not in disable_sensors:
+            self.sensor_flags |= F_SENSOR_AUDIO
+
+    def _tmp(self):
+        kinectDLL.read_audio_sensors()
 
     def connect(self):
         if not kinectDLL.init_kinect(self.sensor_flags):
@@ -67,3 +80,20 @@ class Kinect2:
         if kinectDLL.get_depth_data(depth_ary, True):
             return depth_ary
         return None
+
+    def _process_audio(self, audio_ary):
+        n = int(audio_ary[0])
+        frames = []
+        for i in range(n):
+            subframe_data = audio_ary[i+1:i+SUBFRAME_SIZE+3]
+            beam_angle = subframe_data[0]
+            beam_conf = subframe_data[1]
+            subframe = subframe_data[2:]
+            frames.append((beam_angle, beam_conf, subframe))
+        return frames
+
+    def get_audio_frames(self):
+        audio_ary = np.zeros((1 + MAX_SUBFRAMES * (SUBFRAME_SIZE + 2),), np.float32)
+        if kinectDLL.get_audio_data(audio_ary, True):
+            return self._process_audio(audio_ary)
+        return []
