@@ -10,8 +10,9 @@
 #define F_SENSOR_COLOR  0x00000001
 #define F_SENSOR_DEPTH  0x00000010
 #define F_SENSOR_IR     0x00000100
-#define F_SENSOR_MULTI  0x00000111
-#define F_SENSOR_AUDIO  0x00001000
+#define F_SENSOR_BODY   0x00001000
+#define F_SENSOR_MULTI  0x00001111
+#define F_SENSOR_AUDIO  0x00010000
 #define COLOR_WIDTH     1920
 #define COLOR_HEIGHT    1080
 #define COLOR_CHANNELS  4
@@ -22,6 +23,10 @@
 #define MAX_SUBFRAMES   8
 #define AUDIO_BUF_LEN   512
 #define SUBFRAME_SIZE   256
+#define MAX_BODIES      6
+#define BODY_PROPS      7
+#define MAX_JOINTS      25
+#define JOINT_PROPS     1
 
 
 int                      sensors = 0;
@@ -34,6 +39,9 @@ HANDLE                   multi_worker_thread;
 UINT8                    buffer_color[COLOR_WIDTH * COLOR_HEIGHT * COLOR_CHANNELS];
 UINT16                   buffer_depth[DEPTH_WIDTH * DEPTH_HEIGHT];
 UINT16                   buffer_ir[IR_WIDTH * IR_HEIGHT];
+UINT8                    buffer_bodies[MAX_BODIES * BODY_PROPS];
+INT32                    buffer_joints[MAX_BODIES * MAX_JOINTS * JOINT_PROPS];
+ICoordinateMapper*       coord_mapper;
 std::mutex               buffer_multi_lock;
 
 IAudioBeamFrameReader*   audio_reader;
@@ -63,8 +71,12 @@ EXPORTFUNC bool init_kinect(int sensor_flags) {
         if (sensors & F_SENSOR_IR) {
             source_types |= FrameSourceTypes::FrameSourceTypes_Infrared;
         }
+        if (sensors & F_SENSOR_BODY) {
+            source_types |= FrameSourceTypes::FrameSourceTypes_Body;
+        }
         if (sensors & F_SENSOR_MULTI) {
             sensor->OpenMultiSourceFrameReader(source_types, &multi_reader);
+            sensor->get_CoordinateMapper(&coord_mapper);
             multi_reader->SubscribeMultiSourceFrameArrived(&multi_frame_event);
             multi_terminate = CreateEvent(NULL, FALSE, FALSE, NULL);
             CreateThread(NULL, 0, &multi_worker_wrapper, NULL, 0, NULL);
@@ -125,6 +137,11 @@ HRESULT run_multi_worker() {
     IDepthFrameReference* frameref_depth = NULL;
     IInfraredFrame* frame_ir = NULL;
     IInfraredFrameReference* frameref_ir = NULL;
+    IBodyFrame* frame_body = NULL;
+    IBodyFrameReference* frameref_body = NULL;
+    IBody* bodies[BODY_COUNT] = { 0 };
+    Joint joints[MAX_JOINTS];
+    BOOLEAN tracked;
     while (running) {
         DWORD result = WaitForMultipleObjects(_countof(handles), handles, FALSE, WORKER_TIMEOUT);
         if (result == WAIT_OBJECT_0) {
@@ -147,6 +164,38 @@ HRESULT run_multi_worker() {
                 frameref_ir->AcquireFrame(&frame_ir);
                 frame_ir->CopyFrameDataToArray(IR_WIDTH * IR_HEIGHT, buffer_ir);
             }
+            if (sensors & F_SENSOR_BODY) {
+                multi_frame->get_BodyFrameReference(&frameref_body);
+                frameref_body->AcquireFrame(&frame_body);
+                frame_body->GetAndRefreshBodyData(_countof(bodies), bodies);
+                for (int b_idx = 0; b_idx < BODY_COUNT; b_idx++) {
+                    IBody* body = bodies[b_idx];
+                    int body_offset = b_idx * BODY_PROPS;
+                    body->get_IsTracked(&tracked);
+                    buffer_bodies[body_offset] = tracked;
+                    if (tracked) {
+                        body->get_Engaged((DetectionResult*)&buffer_bodies[body_offset + 1]);
+                        body->get_IsRestricted((BOOLEAN*)&buffer_bodies[body_offset + 2]);
+                        body->get_HandLeftConfidence((TrackingConfidence*)&buffer_bodies[body_offset + 3]);
+                        body->get_HandLeftState((HandState*)&buffer_bodies[body_offset + 4]);
+                        body->get_HandRightConfidence((TrackingConfidence*)&buffer_bodies[body_offset + 5]);
+                        body->get_HandRightState((HandState*)&buffer_bodies[body_offset + 6]);
+                        body->GetJoints(_countof(joints), joints);
+                        for (int j_idx = 0; j_idx < MAX_JOINTS; j_idx++) {
+                            int joint_offset = b_idx * j_idx * JOINT_PROPS;
+                            Joint joint = joints[j_idx];
+                            CameraSpacePoint point = joint.Position;
+                            buffer_joints[joint_offset] = joint.TrackingState;
+                        }
+                    }
+                    //body->GetJoints(_countof(joints), joints);
+                    //CameraSpacePoint x = joints[3].Position;
+                    //ColorSpacePoint colorPoint = { 0 };
+                    //coord_mapper->MapCameraPointToColorSpace(x, &colorPoint);
+                    //std::cout << b_idx << "-" << tracked << "-" << handState << std::endl;
+                    //std::cout << colorPoint.X << ", " << colorPoint.Y << std::endl;
+                }
+            }
             buffer_multi_lock.unlock();
             SAFE_RELEASE(frameref_color);
             SAFE_RELEASE(frame_color);
@@ -154,6 +203,8 @@ HRESULT run_multi_worker() {
             SAFE_RELEASE(frame_depth);
             SAFE_RELEASE(frameref_ir);
             SAFE_RELEASE(frame_ir);
+            SAFE_RELEASE(frameref_body);
+            SAFE_RELEASE(frame_body);
             SAFE_RELEASE(multi_event_args);
             SAFE_RELEASE(multi_ref);
         }
@@ -179,6 +230,7 @@ HRESULT run_audio_worker() {
     IAudioBeamFrameReference* audio_frame_ref = NULL;
     IAudioBeamFrameList* audio_frames = NULL;
     IAudioBeamFrame* audio_frame = NULL;
+    IAudioBeamSubFrame* subframe = NULL;
     UINT32 subframe_count;
     while (running) {
         DWORD result = WaitForMultipleObjects(_countof(handles), handles, FALSE, WORKER_TIMEOUT);
@@ -193,7 +245,6 @@ HRESULT run_audio_worker() {
                     buffer_audio_used = 0;
                 }
                 for (UINT32 i = 0; i < subframe_count; i++) {
-                    IAudioBeamSubFrame* subframe = NULL;
                     audio_frame->GetSubFrame(i, &subframe);
                     process_audio_subframe(subframe, i);
                     SAFE_RELEASE(subframe);
@@ -250,6 +301,16 @@ EXPORTFUNC bool get_depth_data(UINT16* array) {
     buffer_multi_lock.unlock();
     return true;
 }
+
+
+EXPORTFUNC bool get_body_data(UINT8* body_array, INT32* joint_array) {
+    buffer_multi_lock.lock();
+    memcpy(body_array, buffer_bodies, MAX_BODIES * BODY_PROPS * sizeof(UINT8));
+    memcpy(joint_array, buffer_joints, MAX_BODIES * MAX_JOINTS * JOINT_PROPS * sizeof(INT32));
+    buffer_multi_lock.unlock();
+    return true;
+}
+
 
 EXPORTFUNC int get_audio_data(FLOAT* array, FLOAT* meta_array) {
     if (buffer_audio_used == 0) {
