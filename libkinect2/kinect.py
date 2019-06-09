@@ -29,13 +29,13 @@ kinectDLL.init_kinect.restype = ctypes.c_bool
 kinectDLL.close_kinect.argtypes = []
 kinectDLL.close_kinect.restype = None
 
-kinectDLL.get_color_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint8), ctypes.c_bool]
+kinectDLL.get_color_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint8)]
 kinectDLL.get_color_data.restype = ctypes.c_bool
 
-kinectDLL.get_ir_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16), ctypes.c_bool]
+kinectDLL.get_ir_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16)]
 kinectDLL.get_ir_data.restype = ctypes.c_bool
 
-kinectDLL.get_depth_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16), ctypes.c_bool]
+kinectDLL.get_depth_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16)]
 kinectDLL.get_depth_data.restype = ctypes.c_bool
 
 kinectDLL.get_audio_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.float32), np.ctypeslib.ndpointer(dtype=np.float32)]
@@ -68,19 +68,19 @@ class Kinect2:
 
     def get_color_image(self):
         color_ary = np.zeros((COLOR_HEIGHT, COLOR_WIDTH, COLOR_CHANNELS), np.uint8)
-        if kinectDLL.get_color_data(color_ary, True):
+        if kinectDLL.get_color_data(color_ary):
             return color_ary
         return None
 
     def get_ir_image(self):
         ir_ary = np.zeros((IR_HEIGHT, IR_WIDTH, 1), np.uint16)
-        if kinectDLL.get_ir_data(ir_ary, True):
+        if kinectDLL.get_ir_data(ir_ary):
             return ir_ary
         return None
 
     def get_depth_map(self):
         depth_ary = np.zeros((DEPTH_HEIGHT, DEPTH_WIDTH, 1), np.uint16)
-        if kinectDLL.get_depth_data(depth_ary, True):
+        if kinectDLL.get_depth_data(depth_ary):
             return depth_ary
         return None
 

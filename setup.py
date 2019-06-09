@@ -24,7 +24,7 @@ def get_version():
 
 
 setup(
-    name='Kinect2-Python',
+    name='libkinect2',
     version=get_version(),
     author='Shrivu Shankar',
     url='https://github.com/sshh12/Kinect2-Python',
