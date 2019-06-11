@@ -9,10 +9,11 @@
 
 HRESULT run_multi_worker();
 DWORD WINAPI multi_worker_wrapper(_In_ LPVOID lp_param);
+inline void process_body(IBody* body, int body_idx);
 
 HRESULT run_audio_worker();
 DWORD WINAPI audio_worker_wrapper(_In_ LPVOID lp_param);
-void process_audio_subframe(IAudioBeamSubFrame* subframe, int index);
+inline void process_audio_subframe(IAudioBeamSubFrame* subframe, int index);
 
 
 EXPORTFUNC bool init_kinect(int sensor_flags);

@@ -23,7 +23,41 @@ SUBFRAME_SIZE   = 256
 MAX_BODIES      = 6
 BODY_PROPS      = 7
 MAX_JOINTS      = 25
-JOINT_PROPS     = 1
+JOINT_PROPS     = 5
+
+
+JOINT_MAP = {
+    'spine_base':     0,
+    'spine_mid':      1,
+    'neck':           2,
+    'head':           3,
+    'shoulder_left':  3,
+    'elbow_left':     5,
+    'wrist_left':     6,
+    'hand_left':      7,
+    'shoulder_right': 8,
+    'elbow_right':    9,
+    'wrist_right':    10,
+    'hand_right':     11,
+    'hip_left':       12,
+    'knee_left':      13,
+    'ankle_left':     14,
+    'foot_left':      15,
+    'hip_right':      16,
+    'knee_right':     17,
+    'ankle_right':    18,
+    'foot_right':     19,
+    'spine_shoulder': 20,
+    'hand_left_tip':  21,
+    'thumb_left':     22,
+    'hand_right_tip': 23,
+    'thumb_right':    24
+}
+
+TRACKING_MAP = [False, 'inferred', 'tracked']
+HIGH_CONFIDENCE_MAP = [False, True]
+HAND_MAP = ['unk', False, 'open', 'closed', 'lasso']
+
 
 
 kinectDLL = ctypes.cdll.LoadLibrary(resource_filename(__name__, 'data/Kinect2-API.dll'))
@@ -96,6 +130,7 @@ class Kinect2:
         for i in range(MAX_BODIES):
             if body_ary[i, 0]:
                 bodies.append(Body(i, body_ary[i], joint_ary[i]))
+                print(joint_ary[i])
         return bodies
 
     def get_bodies(self):
@@ -128,6 +163,32 @@ class Body:
     def __init__(self, idx, body_ary, joint_ary):
         self.idx = idx
         self.tracked = body_ary[0]
+        self._body_ary = body_ary
+        self._joint_ary = joint_ary
+        self._load_props()
+
+    def _load_props(self):
+        self.engaged = self._body_ary[1]
+        self.restricted = self._body_ary[2]
+
+    def keys(self):
+        return JOINT_MAP.keys()
+
+    def __getitem__(self, key):
+        if isinstance(key, tuple):
+            joint_name, pos_type = key
+        else:
+            joint_name, pos_type = key, 'color'
+        joint_data = self._joint_ary[JOINT_MAP[joint_name]]
+        if pos_type == 'color':
+            track_data = (TRACKING_MAP[joint_data[0]], joint_data[1], joint_data[2])
+        else:
+            track_data = (TRACKING_MAP[joint_data[0]], joint_data[3], joint_data[4])
+        if joint_name == 'hand_left':
+            track_data += (HIGH_CONFIDENCE_MAP[self._body_ary[3]], HAND_MAP[self._body_ary[4]])
+        elif joint_name == 'hand_right':
+            track_data += (HIGH_CONFIDENCE_MAP[self._body_ary[5]], HAND_MAP[self._body_ary[6]])
+        return track_data
 
     def __repr__(self):
         if self.tracked:

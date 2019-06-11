@@ -26,7 +26,7 @@
 #define MAX_BODIES      6
 #define BODY_PROPS      7
 #define MAX_JOINTS      25
-#define JOINT_PROPS     1
+#define JOINT_PROPS     5
 
 
 int                      sensors = 0;
@@ -140,8 +140,6 @@ HRESULT run_multi_worker() {
     IBodyFrame* frame_body = NULL;
     IBodyFrameReference* frameref_body = NULL;
     IBody* bodies[BODY_COUNT] = { 0 };
-    Joint joints[MAX_JOINTS];
-    BOOLEAN tracked;
     while (running) {
         DWORD result = WaitForMultipleObjects(_countof(handles), handles, FALSE, WORKER_TIMEOUT);
         if (result == WAIT_OBJECT_0) {
@@ -169,31 +167,7 @@ HRESULT run_multi_worker() {
                 frameref_body->AcquireFrame(&frame_body);
                 frame_body->GetAndRefreshBodyData(_countof(bodies), bodies);
                 for (int b_idx = 0; b_idx < BODY_COUNT; b_idx++) {
-                    IBody* body = bodies[b_idx];
-                    int body_offset = b_idx * BODY_PROPS;
-                    body->get_IsTracked(&tracked);
-                    buffer_bodies[body_offset] = tracked;
-                    if (tracked) {
-                        body->get_Engaged((DetectionResult*)&buffer_bodies[body_offset + 1]);
-                        body->get_IsRestricted((BOOLEAN*)&buffer_bodies[body_offset + 2]);
-                        body->get_HandLeftConfidence((TrackingConfidence*)&buffer_bodies[body_offset + 3]);
-                        body->get_HandLeftState((HandState*)&buffer_bodies[body_offset + 4]);
-                        body->get_HandRightConfidence((TrackingConfidence*)&buffer_bodies[body_offset + 5]);
-                        body->get_HandRightState((HandState*)&buffer_bodies[body_offset + 6]);
-                        body->GetJoints(_countof(joints), joints);
-                        for (int j_idx = 0; j_idx < MAX_JOINTS; j_idx++) {
-                            int joint_offset = b_idx * j_idx * JOINT_PROPS;
-                            Joint joint = joints[j_idx];
-                            CameraSpacePoint point = joint.Position;
-                            buffer_joints[joint_offset] = joint.TrackingState;
-                        }
-                    }
-                    //body->GetJoints(_countof(joints), joints);
-                    //CameraSpacePoint x = joints[3].Position;
-                    //ColorSpacePoint colorPoint = { 0 };
-                    //coord_mapper->MapCameraPointToColorSpace(x, &colorPoint);
-                    //std::cout << b_idx << "-" << tracked << "-" << handState << std::endl;
-                    //std::cout << colorPoint.X << ", " << colorPoint.Y << std::endl;
+                    process_body(bodies[b_idx], b_idx);
                 }
             }
             buffer_multi_lock.unlock();
@@ -213,6 +187,41 @@ HRESULT run_multi_worker() {
         }
     }
     return S_OK;
+}
+
+
+inline void process_body(IBody* body, int body_idx) {
+    Joint joints[MAX_JOINTS];
+    BOOLEAN tracked;
+    int body_offset = body_idx * BODY_PROPS;
+    int joint_offset;
+    Joint joint;
+    CameraSpacePoint joint_pos;
+    ColorSpacePoint color_pos;
+    DepthSpacePoint depth_pos;
+    body->get_IsTracked(&tracked);
+    buffer_bodies[body_offset] = !!tracked;
+    if (tracked) {
+        body->get_Engaged((DetectionResult*)&buffer_bodies[body_offset + 1]);
+        body->get_IsRestricted((BOOLEAN*)&buffer_bodies[body_offset + 2]);
+        body->get_HandLeftConfidence((TrackingConfidence*)&buffer_bodies[body_offset + 3]);
+        body->get_HandLeftState((HandState*)&buffer_bodies[body_offset + 4]);
+        body->get_HandRightConfidence((TrackingConfidence*)&buffer_bodies[body_offset + 5]);
+        body->get_HandRightState((HandState*)&buffer_bodies[body_offset + 6]);
+        // body->GetExpressionDetectionResults();
+        for (int j_idx = 0; j_idx < MAX_JOINTS; j_idx++) {
+            joint_offset = body_idx * MAX_JOINTS * JOINT_PROPS + j_idx * JOINT_PROPS;
+            joint = joints[j_idx];
+            joint_pos = joint.Position;
+            coord_mapper->MapCameraPointToColorSpace(joint_pos, &color_pos);
+            coord_mapper->MapCameraPointToDepthSpace(joint_pos, &depth_pos);
+            buffer_joints[joint_offset] = joint.TrackingState;
+            buffer_joints[joint_offset + 1] = (int)color_pos.X;
+            buffer_joints[joint_offset + 2] = (int)color_pos.Y;
+            buffer_joints[joint_offset + 3] = (int)depth_pos.X;
+            buffer_joints[joint_offset + 4] = (int)depth_pos.Y;
+        }
+    }
 }
 
 
@@ -265,7 +274,7 @@ HRESULT run_audio_worker() {
 }
 
 
-void process_audio_subframe(IAudioBeamSubFrame* subframe, int index) {
+inline void process_audio_subframe(IAudioBeamSubFrame* subframe, int index) {
     float* audio_buf = NULL;
     float beam_angle;
     float beam_conf;
