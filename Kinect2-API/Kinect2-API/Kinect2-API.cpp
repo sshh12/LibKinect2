@@ -24,7 +24,7 @@
 #define AUDIO_BUF_LEN   512
 #define SUBFRAME_SIZE   256
 #define MAX_BODIES      6
-#define BODY_PROPS      7
+#define BODY_PROPS      15
 #define MAX_JOINTS      25
 #define JOINT_PROPS     5
 
@@ -208,7 +208,9 @@ inline void process_body(IBody* body, int body_idx) {
         body->get_HandLeftState((HandState*)&buffer_bodies[body_offset + 4]);
         body->get_HandRightConfidence((TrackingConfidence*)&buffer_bodies[body_offset + 5]);
         body->get_HandRightState((HandState*)&buffer_bodies[body_offset + 6]);
-        // body->GetExpressionDetectionResults();
+        body->GetExpressionDetectionResults(2, (DetectionResult*)&buffer_bodies[body_offset + 7]);
+        body->GetActivityDetectionResults(5, (DetectionResult*)&buffer_bodies[body_offset + 7 + 2]);
+        body->GetAppearanceDetectionResults(1, (DetectionResult*)&buffer_bodies[body_offset + 7 + 2 + 5]);
         for (int j_idx = 0; j_idx < MAX_JOINTS; j_idx++) {
             joint_offset = body_idx * MAX_JOINTS * JOINT_PROPS + j_idx * JOINT_PROPS;
             joint = joints[j_idx];

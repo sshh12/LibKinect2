@@ -21,7 +21,7 @@ SUBFRAME_SIZE   = 256
 AUDIO_BUF_LEN   = 512
 SUBFRAME_SIZE   = 256
 MAX_BODIES      = 6
-BODY_PROPS      = 7
+BODY_PROPS      = 15
 MAX_JOINTS      = 25
 JOINT_PROPS     = 5
 
@@ -51,13 +51,16 @@ JOINT_MAP = {
     'hand_left_tip':  21,
     'thumb_left':     22,
     'hand_right_tip': 23,
-    'thumb_right':    24
+    'thumb_right':    24,
+    'eye_left':       -1,
+    'eye_right':      -1,
+    'mouth':          -1
 }
 
-TRACKING_MAP = [False, 'inferred', 'tracked']
+TRACKING_MAP = [None, 'inferred', 'tracked']
 HIGH_CONFIDENCE_MAP = [False, True]
-HAND_MAP = ['unk', False, 'open', 'closed', 'lasso']
-
+HAND_MAP = ['unk', None, 'open', 'closed', 'lasso']
+DETECTION_MAP = ['unk', None, 'maybe', 'yes']
 
 
 kinectDLL = ctypes.cdll.LoadLibrary(resource_filename(__name__, 'data/Kinect2-API.dll'))
@@ -130,7 +133,6 @@ class Kinect2:
         for i in range(MAX_BODIES):
             if body_ary[i, 0]:
                 bodies.append(Body(i, body_ary[i], joint_ary[i]))
-                print(joint_ary[i])
         return bodies
 
     def get_bodies(self):
@@ -162,14 +164,18 @@ class Body:
 
     def __init__(self, idx, body_ary, joint_ary):
         self.idx = idx
-        self.tracked = body_ary[0]
         self._body_ary = body_ary
         self._joint_ary = joint_ary
         self._load_props()
 
     def _load_props(self):
-        self.engaged = self._body_ary[1]
-        self.restricted = self._body_ary[2]
+        self.tracked = self._body_ary[0]
+        self.engaged = DETECTION_MAP[self._body_ary[1]]
+        self.restricted = bool(self._body_ary[2])
+        self.neutral = DETECTION_MAP[self._body_ary[7]]
+        self.happy = DETECTION_MAP[self._body_ary[8]]
+        self.looking_away = DETECTION_MAP[self._body_ary[13]]
+        self.glasses = DETECTION_MAP[self._body_ary[14]]
 
     def keys(self):
         return JOINT_MAP.keys()
@@ -179,6 +185,19 @@ class Body:
             joint_name, pos_type = key
         else:
             joint_name, pos_type = key, 'color'
+        if JOINT_MAP[joint_name] != -1:
+            return self._get_tracked_joint_data(joint_name, pos_type)
+        else:
+           return self._get_untracked_joint_data(joint_name, pos_type)
+
+    def _get_untracked_joint_data(self, joint_name, pos_typ):
+        # self.eyeleftclosed = DETECTION_MAP[self._body_ary[9]]
+        # self.eyerightclosed = DETECTION_MAP[self._body_ary[10]]
+        # self.mouthopen = DETECTION_MAP[self._body_ary[11]]
+        # self.mouthclosed = DETECTION_MAP[self._body_ary[12]]
+        raise NotImplementedError()
+
+    def _get_tracked_joint_data(self, joint_name, pos_type):
         joint_data = self._joint_ary[JOINT_MAP[joint_name]]
         if pos_type == 'color':
             track_data = (TRACKING_MAP[joint_data[0]], joint_data[1], joint_data[2])
