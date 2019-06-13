@@ -21,10 +21,11 @@ DWORD WINAPI audio_worker_wrapper(_In_ LPVOID lp_param);
 inline void process_audio_subframe(IAudioBeamSubFrame* subframe, int index);
 
 
-EXPORTFUNC bool init_kinect(int sensor_flags);
+EXPORTFUNC bool init_kinect(int sensor_flags, int mapping_flags);
 EXPORTFUNC void close_kinect();
 EXPORTFUNC bool get_color_data(UINT8* array);
 EXPORTFUNC bool get_ir_data(UINT16* array);
 EXPORTFUNC bool get_depth_data(UINT16* array);
 EXPORTFUNC bool get_body_data(UINT8* body_array, INT32* joint_array);
 EXPORTFUNC int get_audio_data(FLOAT* array, FLOAT* meta_array);
+EXPORTFUNC bool get_map_color_to_camera(FLOAT* array);

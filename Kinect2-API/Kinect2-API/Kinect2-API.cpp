@@ -6,31 +6,33 @@
 #include <mutex>
 
 
-#define WORKER_TIMEOUT  5000
-#define F_SENSOR_COLOR  0x00000001
-#define F_SENSOR_DEPTH  0x00000010
-#define F_SENSOR_IR     0x00000100
-#define F_SENSOR_BODY   0x00001000
-#define F_SENSOR_MULTI  0x00001111
-#define F_SENSOR_AUDIO  0x00010000
-#define COLOR_WIDTH     1920
-#define COLOR_HEIGHT    1080
-#define COLOR_CHANNELS  4
-#define DEPTH_WIDTH     512
-#define DEPTH_HEIGHT    424
-#define IR_WIDTH        512
-#define IR_HEIGHT       424
-#define MAX_SUBFRAMES   8
-#define AUDIO_BUF_LEN   512
-#define SUBFRAME_SIZE   256
-#define MAX_BODIES      6
-#define BODY_PROPS      15
-#define MAX_JOINTS      25
-#define JOINT_PROPS     9
-#define FLOAT_MULT      100000
+#define WORKER_TIMEOUT   5000
+#define F_SENSOR_COLOR   0x00000001
+#define F_SENSOR_DEPTH   0x00000010
+#define F_SENSOR_IR      0x00000100
+#define F_SENSOR_BODY    0x00001000
+#define F_SENSOR_MULTI   0x00001111
+#define F_SENSOR_AUDIO   0x00010000
+#define F_MAP_COLOR_CAM  0x00000002
+#define COLOR_WIDTH      1920
+#define COLOR_HEIGHT     1080
+#define COLOR_CHANNELS   4
+#define DEPTH_WIDTH      512
+#define DEPTH_HEIGHT     424
+#define IR_WIDTH         512
+#define IR_HEIGHT        424
+#define MAX_SUBFRAMES    8
+#define AUDIO_BUF_LEN    512
+#define SUBFRAME_SIZE    256
+#define MAX_BODIES       6
+#define BODY_PROPS       15
+#define MAX_JOINTS       25
+#define JOINT_PROPS      9
+#define FLOAT_MULT       100000
 
 
 int                      sensors = 0;
+int                      mappings = 0;
 IKinectSensor*           sensor;
 std::mutex               worker_lock;
 
@@ -47,6 +49,8 @@ INT32                    buffer_joints[MAX_BODIES * MAX_JOINTS * JOINT_PROPS];
 ICoordinateMapper*       coord_mapper;
 std::mutex               buffer_multi_lock;
 
+CameraSpacePoint         map_color_camera[COLOR_HEIGHT * COLOR_WIDTH];
+
 IAudioBeamFrameReader*   audio_reader;
 WAITABLE_HANDLE          audio_frame_event;
 HANDLE                   audio_terminate = NULL;
@@ -57,11 +61,12 @@ UINT32                   buffer_audio_used = 0;
 std::mutex               buffer_audio_lock;
 
 
-EXPORTFUNC bool init_kinect(int sensor_flags) {
+EXPORTFUNC bool init_kinect(int sensor_flags, int mapping_flags) {
     if (!sensor_flags || FAILED(GetDefaultKinectSensor(&sensor))) {
         return false;
     }
     sensors = sensor_flags;
+    mappings = mapping_flags;
     if (sensor) {
         sensor->Open();
         int source_types = 0; 
@@ -83,6 +88,9 @@ EXPORTFUNC bool init_kinect(int sensor_flags) {
             multi_reader->SubscribeMultiSourceFrameArrived(&multi_frame_event);
             multi_terminate = CreateEvent(NULL, FALSE, FALSE, NULL);
             CreateThread(NULL, 0, &multi_worker_wrapper, NULL, 0, NULL);
+        }
+        else {
+            mappings = 0;
         }
         if (sensors & F_SENSOR_AUDIO) {
             IAudioSource* audio_source;
@@ -190,6 +198,9 @@ HRESULT run_multi_worker() {
                 for (int b_idx = 0; b_idx < BODY_COUNT; b_idx++) {
                     process_body(bodies[b_idx], b_idx, joints, joint_orients);
                 }
+            }
+            if (mappings & F_MAP_COLOR_CAM && multi_tick > 5) {
+                coord_mapper->MapColorFrameToCameraSpace(DEPTH_HEIGHT * DEPTH_WIDTH, buffer_depth, COLOR_HEIGHT * COLOR_WIDTH, map_color_camera);
             }
             worker_lock.unlock();
             buffer_multi_lock.unlock();
@@ -364,4 +375,12 @@ EXPORTFUNC int get_audio_data(FLOAT* array, FLOAT* meta_array) {
     buffer_audio_used = 0;
     buffer_audio_lock.unlock();
     return len;
+}
+
+
+EXPORTFUNC bool get_map_color_to_camera(FLOAT* array) {
+    buffer_multi_lock.lock();
+    memcpy(array, map_color_camera, COLOR_HEIGHT * COLOR_WIDTH * 3 * sizeof(FLOAT));
+    buffer_multi_lock.unlock();
+    return true;
 }
