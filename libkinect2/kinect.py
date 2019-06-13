@@ -64,33 +64,47 @@ HAND_MAP = ['unk', None, 'open', 'closed', 'lasso']
 DETECTION_MAP = ['unk', None, 'maybe', 'yes']
 
 
-kinectDLL = ctypes.cdll.LoadLibrary(resource_filename(__name__, 'data/Kinect2-API.dll'))
+def init_lib():
 
-kinectDLL.init_kinect.argtypes = [ctypes.c_int]
-kinectDLL.init_kinect.restype = ctypes.c_bool
+    kinectDLL = ctypes.cdll.LoadLibrary(resource_filename(__name__, 'data/Kinect2-API.dll'))
 
-kinectDLL.close_kinect.argtypes = []
-kinectDLL.close_kinect.restype = None
+    kinectDLL.init_kinect.argtypes = [ctypes.c_int]
+    kinectDLL.init_kinect.restype = ctypes.c_bool
 
-kinectDLL.get_color_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint8)]
-kinectDLL.get_color_data.restype = ctypes.c_bool
+    kinectDLL.close_kinect.argtypes = []
+    kinectDLL.close_kinect.restype = None
 
-kinectDLL.get_ir_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16)]
-kinectDLL.get_ir_data.restype = ctypes.c_bool
+    kinectDLL.pause_worker.argtypes = []
+    kinectDLL.pause_worker.restype = None
 
-kinectDLL.get_depth_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16)]
-kinectDLL.get_depth_data.restype = ctypes.c_bool
+    kinectDLL.resume_worker.argtypes = []
+    kinectDLL.resume_worker.restype = None
 
-kinectDLL.get_body_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint8), np.ctypeslib.ndpointer(dtype=np.int32)]
-kinectDLL.get_body_data.restype = ctypes.c_bool
+    kinectDLL.get_tick.argtypes = []
+    kinectDLL.get_tick.restype = ctypes.c_int32
 
-kinectDLL.get_audio_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.float32), np.ctypeslib.ndpointer(dtype=np.float32)]
-kinectDLL.get_audio_data.restype = ctypes.c_int32
+    kinectDLL.get_color_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint8)]
+    kinectDLL.get_color_data.restype = ctypes.c_bool
+
+    kinectDLL.get_ir_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16)]
+    kinectDLL.get_ir_data.restype = ctypes.c_bool
+
+    kinectDLL.get_depth_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint16)]
+    kinectDLL.get_depth_data.restype = ctypes.c_bool
+
+    kinectDLL.get_body_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.uint8), np.ctypeslib.ndpointer(dtype=np.int32)]
+    kinectDLL.get_body_data.restype = ctypes.c_bool
+
+    kinectDLL.get_audio_data.argtypes = [np.ctypeslib.ndpointer(dtype=np.float32), np.ctypeslib.ndpointer(dtype=np.float32)]
+    kinectDLL.get_audio_data.restype = ctypes.c_int32
+
+    return kinectDLL
 
 
 class Kinect2:
 
     def __init__(self, use_sensors=['color']):
+        self._kinect = init_lib()
         self.sensor_flags = 0
         if 'color' in use_sensors:
             self.sensor_flags |= F_SENSOR_COLOR
@@ -104,35 +118,35 @@ class Kinect2:
             self.sensor_flags |= F_SENSOR_AUDIO
 
     def connect(self):
-        if not kinectDLL.init_kinect(self.sensor_flags):
+        if not self._kinect.init_kinect(self.sensor_flags):
             raise IOError('Unable to init Kinect2 Sensor.')
         return True
 
     def disconnect(self):
-        kinectDLL.close_kinect()
+        self._kinect.close_kinect()
 
     def get_color_image(self):
         color_ary = np.empty((COLOR_HEIGHT, COLOR_WIDTH, COLOR_CHANNELS), np.uint8)
-        if kinectDLL.get_color_data(color_ary):
+        if self._kinect.get_color_data(color_ary):
             return color_ary
         return None
 
     def get_ir_image(self):
         ir_ary = np.empty((IR_HEIGHT, IR_WIDTH, 1), np.uint16)
-        if kinectDLL.get_ir_data(ir_ary):
+        if self._kinect.get_ir_data(ir_ary):
             return ir_ary
         return None
 
     def get_depth_map(self):
         depth_ary = np.empty((DEPTH_HEIGHT, DEPTH_WIDTH, 1), np.uint16)
-        if kinectDLL.get_depth_data(depth_ary):
+        if self._kinect.get_depth_data(depth_ary):
             return depth_ary
         return None
 
     def _get_raw_bodies(self):
         body_ary = np.empty((MAX_BODIES, BODY_PROPS), np.uint8)
         joint_ary = np.empty((MAX_BODIES, MAX_JOINTS, JOINT_PROPS), np.int32)
-        if kinectDLL.get_body_data(body_ary, joint_ary):
+        if self._kinect.get_body_data(body_ary, joint_ary):
             return body_ary, joint_ary
         return None, None
 
@@ -148,7 +162,7 @@ class Kinect2:
     def _get_raw_audio(self):
         audio_ary = np.empty((AUDIO_BUF_LEN * SUBFRAME_SIZE,), np.float32)
         meta_ary = np.empty((AUDIO_BUF_LEN * 2,), np.float32)
-        frame_cnt = kinectDLL.get_audio_data(audio_ary, meta_ary)
+        frame_cnt = self._kinect.get_audio_data(audio_ary, meta_ary)
         return frame_cnt, audio_ary, meta_ary
 
     def get_audio_frames(self):

@@ -32,7 +32,9 @@
 
 int                      sensors = 0;
 IKinectSensor*           sensor;
+std::mutex               worker_lock;
 
+int                      multi_tick = 0;
 IMultiSourceFrameReader* multi_reader;
 WAITABLE_HANDLE          multi_frame_event;
 HANDLE                   multi_terminate = NULL;
@@ -119,6 +121,21 @@ EXPORTFUNC void close_kinect() {
 }
 
 
+EXPORTFUNC int get_tick() {
+    return multi_tick;
+}
+
+
+EXPORTFUNC void pause_worker() {
+    worker_lock.lock();
+}
+
+
+EXPORTFUNC void resume_worker() {
+    worker_lock.unlock();
+}
+
+
 DWORD WINAPI multi_worker_wrapper(_In_ LPVOID lp_param) {
     HRESULT hr = S_OK;
     hr = run_multi_worker();
@@ -150,6 +167,7 @@ HRESULT run_multi_worker() {
             multi_event_args->get_FrameReference(&multi_ref);
             multi_ref->AcquireFrame(&multi_frame);
             buffer_multi_lock.lock();
+            worker_lock.lock();
             if (sensors & F_SENSOR_COLOR) {
                 multi_frame->get_ColorFrameReference(&frameref_color);
                 frameref_color->AcquireFrame(&frame_color);
@@ -173,7 +191,9 @@ HRESULT run_multi_worker() {
                     process_body(bodies[b_idx], b_idx, joints, joint_orients);
                 }
             }
+            worker_lock.unlock();
             buffer_multi_lock.unlock();
+            multi_tick += 1;
             SAFE_RELEASE(frameref_color);
             SAFE_RELEASE(frame_color);
             SAFE_RELEASE(frameref_depth);
