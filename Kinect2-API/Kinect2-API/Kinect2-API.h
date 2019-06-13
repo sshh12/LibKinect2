@@ -9,7 +9,7 @@
 
 HRESULT run_multi_worker();
 DWORD WINAPI multi_worker_wrapper(_In_ LPVOID lp_param);
-inline void process_body(IBody* body, int body_idx);
+inline void process_body(IBody* body, int body_idx, Joint* joints, JointOrientation* joint_orients)
 
 HRESULT run_audio_worker();
 DWORD WINAPI audio_worker_wrapper(_In_ LPVOID lp_param);

@@ -26,7 +26,8 @@
 #define MAX_BODIES      6
 #define BODY_PROPS      15
 #define MAX_JOINTS      25
-#define JOINT_PROPS     5
+#define JOINT_PROPS     9
+#define FLOAT_MULT      100000
 
 
 int                      sensors = 0;
@@ -140,6 +141,8 @@ HRESULT run_multi_worker() {
     IBodyFrame* frame_body = NULL;
     IBodyFrameReference* frameref_body = NULL;
     IBody* bodies[BODY_COUNT] = { 0 };
+    Joint joints[MAX_JOINTS];
+    JointOrientation joint_orients[MAX_JOINTS];
     while (running) {
         DWORD result = WaitForMultipleObjects(_countof(handles), handles, FALSE, WORKER_TIMEOUT);
         if (result == WAIT_OBJECT_0) {
@@ -167,7 +170,7 @@ HRESULT run_multi_worker() {
                 frameref_body->AcquireFrame(&frame_body);
                 frame_body->GetAndRefreshBodyData(_countof(bodies), bodies);
                 for (int b_idx = 0; b_idx < BODY_COUNT; b_idx++) {
-                    process_body(bodies[b_idx], b_idx);
+                    process_body(bodies[b_idx], b_idx, joints, joint_orients);
                 }
             }
             buffer_multi_lock.unlock();
@@ -190,12 +193,12 @@ HRESULT run_multi_worker() {
 }
 
 
-inline void process_body(IBody* body, int body_idx) {
-    Joint joints[MAX_JOINTS];
+inline void process_body(IBody* body, int body_idx, Joint* joints, JointOrientation* joint_orients) {
     BOOLEAN tracked;
     int body_offset = body_idx * BODY_PROPS;
     int joint_offset;
     Joint joint;
+    Vector4 joint_orient;
     CameraSpacePoint joint_pos;
     ColorSpacePoint color_pos;
     DepthSpacePoint depth_pos;
@@ -211,9 +214,12 @@ inline void process_body(IBody* body, int body_idx) {
         body->GetExpressionDetectionResults(2, (DetectionResult*)&buffer_bodies[body_offset + 7]);
         body->GetActivityDetectionResults(5, (DetectionResult*)&buffer_bodies[body_offset + 7 + 2]);
         body->GetAppearanceDetectionResults(1, (DetectionResult*)&buffer_bodies[body_offset + 7 + 2 + 5]);
+        body->GetJoints(MAX_JOINTS, joints);
+        body->GetJointOrientations(MAX_JOINTS, joint_orients);
         for (int j_idx = 0; j_idx < MAX_JOINTS; j_idx++) {
             joint_offset = body_idx * MAX_JOINTS * JOINT_PROPS + j_idx * JOINT_PROPS;
             joint = joints[j_idx];
+            joint_orient = joint_orients[j_idx].Orientation;
             joint_pos = joint.Position;
             coord_mapper->MapCameraPointToColorSpace(joint_pos, &color_pos);
             coord_mapper->MapCameraPointToDepthSpace(joint_pos, &depth_pos);
@@ -222,6 +228,10 @@ inline void process_body(IBody* body, int body_idx) {
             buffer_joints[joint_offset + 2] = (int)color_pos.Y;
             buffer_joints[joint_offset + 3] = (int)depth_pos.X;
             buffer_joints[joint_offset + 4] = (int)depth_pos.Y;
+            buffer_joints[joint_offset + 5] = (int)(joint_orient.w * FLOAT_MULT);
+            buffer_joints[joint_offset + 6] = (int)(joint_orient.x * FLOAT_MULT);
+            buffer_joints[joint_offset + 7] = (int)(joint_orient.y * FLOAT_MULT);
+            buffer_joints[joint_offset + 8] = (int)(joint_orient.z * FLOAT_MULT);
         }
     }
 }

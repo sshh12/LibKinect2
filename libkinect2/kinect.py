@@ -23,7 +23,8 @@ SUBFRAME_SIZE   = 256
 MAX_BODIES      = 6
 BODY_PROPS      = 15
 MAX_JOINTS      = 25
-JOINT_PROPS     = 5
+JOINT_PROPS     = 9
+FLOAT_MULT      = 100000
 
 
 JOINT_MAP = {
@@ -31,7 +32,7 @@ JOINT_MAP = {
     'spine_mid':      1,
     'neck':           2,
     'head':           3,
-    'shoulder_left':  3,
+    'shoulder_left':  4,
     'elbow_left':     5,
     'wrist_left':     6,
     'hand_left':      7,
@@ -128,21 +129,30 @@ class Kinect2:
             return depth_ary
         return None
 
-    def _process_bodies(self, body_ary, joint_ary):
-        bodies = []
-        for i in range(MAX_BODIES):
-            if body_ary[i, 0]:
-                bodies.append(Body(i, body_ary[i], joint_ary[i]))
-        return bodies
-
-    def get_bodies(self):
+    def _get_raw_bodies(self):
         body_ary = np.empty((MAX_BODIES, BODY_PROPS), np.uint8)
         joint_ary = np.empty((MAX_BODIES, MAX_JOINTS, JOINT_PROPS), np.int32)
         if kinectDLL.get_body_data(body_ary, joint_ary):
-            return self._process_bodies(body_ary, joint_ary)
-        return None
+            return body_ary, joint_ary
+        return None, None
 
-    def _process_audio(self, frame_cnt, audio_ary, meta_ary):
+    def get_bodies(self):
+        body_ary, joint_ary = self._get_raw_bodies()
+        bodies = []
+        if body_ary is not None:
+            for i in range(MAX_BODIES):
+                if body_ary[i, 0]:
+                    bodies.append(Body(i, body_ary[i], joint_ary[i]))
+        return bodies
+
+    def _get_raw_audio(self):
+        audio_ary = np.empty((AUDIO_BUF_LEN * SUBFRAME_SIZE,), np.float32)
+        meta_ary = np.empty((AUDIO_BUF_LEN * 2,), np.float32)
+        frame_cnt = kinectDLL.get_audio_data(audio_ary, meta_ary)
+        return frame_cnt, audio_ary, meta_ary
+
+    def get_audio_frames(self):
+        frame_cnt, audio_ary, meta_ary = self._get_raw_audio()
         frames = []
         for i in range(frame_cnt):
             beam_angle = meta_ary[i*2]
@@ -151,21 +161,13 @@ class Kinect2:
             frames.append((beam_angle, beam_conf, samples))
         return frames
 
-    def get_audio_frames(self):
-        audio_ary = np.empty((AUDIO_BUF_LEN * SUBFRAME_SIZE,), np.float32)
-        meta_ary = np.empty((AUDIO_BUF_LEN * 2,), np.float32)
-        frame_cnt = kinectDLL.get_audio_data(audio_ary, meta_ary)
-        if frame_cnt:
-            return self._process_audio(frame_cnt, audio_ary, meta_ary)
-        return []
-
 
 class Body:
 
-    def __init__(self, idx, body_ary, joint_ary):
+    def __init__(self, idx, body_ary, joints_ary):
         self.idx = idx
         self._body_ary = body_ary
-        self._joint_ary = joint_ary
+        self._joints_ary = joints_ary
         self._load_props()
 
     def _load_props(self):
@@ -180,34 +182,11 @@ class Body:
     def keys(self):
         return JOINT_MAP.keys()
 
-    def __getitem__(self, key):
-        if isinstance(key, tuple):
-            joint_name, pos_type = key
-        else:
-            joint_name, pos_type = key, 'color'
-        if JOINT_MAP[joint_name] != -1:
-            return self._get_tracked_joint_data(joint_name, pos_type)
-        else:
-           return self._get_untracked_joint_data(joint_name, pos_type)
-
-    def _get_untracked_joint_data(self, joint_name, pos_typ):
-        # self.eyeleftclosed = DETECTION_MAP[self._body_ary[9]]
-        # self.eyerightclosed = DETECTION_MAP[self._body_ary[10]]
-        # self.mouthopen = DETECTION_MAP[self._body_ary[11]]
-        # self.mouthclosed = DETECTION_MAP[self._body_ary[12]]
-        raise NotImplementedError()
-
-    def _get_tracked_joint_data(self, joint_name, pos_type):
-        joint_data = self._joint_ary[JOINT_MAP[joint_name]]
-        if pos_type == 'color':
-            track_data = (TRACKING_MAP[joint_data[0]], joint_data[1], joint_data[2])
-        else:
-            track_data = (TRACKING_MAP[joint_data[0]], joint_data[3], joint_data[4])
-        if joint_name == 'hand_left':
-            track_data += (HIGH_CONFIDENCE_MAP[self._body_ary[3]], HAND_MAP[self._body_ary[4]])
-        elif joint_name == 'hand_right':
-            track_data += (HIGH_CONFIDENCE_MAP[self._body_ary[5]], HAND_MAP[self._body_ary[6]])
-        return track_data
+    def __getitem__(self, joint_name):
+        joint_idx = JOINT_MAP[joint_name.lower()]
+        if joint_idx == -1:
+            raise NotImplementedError()
+        return Joint(joint_name, self._body_ary, self._joints_ary[joint_idx])
 
     def __repr__(self):
         if self.tracked:
@@ -215,3 +194,38 @@ class Body:
         else:
             state = ''
         return '<Body ({}){}>'.format(self.idx, state)
+
+
+class Joint:
+
+    def __init__(self, joint_name, body_ary, joint_ary):
+        self.name = joint_name
+        self._body_ary = body_ary
+        self._joint_ary = joint_ary
+        self._load_props()
+    
+    def _load_props(self):
+        self.tracking = TRACKING_MAP[self._joint_ary[0]]
+        self.color_pos = (self._joint_ary[1], self._joint_ary[2])
+        self.depth_pos = (self._joint_ary[3], self._joint_ary[4])
+        self.orientation = (
+            self._joint_ary[5] / FLOAT_MULT,
+            self._joint_ary[6] / FLOAT_MULT,
+            self._joint_ary[7] / FLOAT_MULT,
+            self._joint_ary[8] / FLOAT_MULT
+        )
+        if self.name == 'hand_left':
+            self.confidence = HIGH_CONFIDENCE_MAP[self._body_ary[3]]
+            self.state = HAND_MAP[self._body_ary[4]]
+        elif self.name == 'hand_right':
+            self.confidence = HIGH_CONFIDENCE_MAP[self._body_ary[5]]
+            self.state = HAND_MAP[self._body_ary[6]]
+        else:
+            self.confidence = None
+            self.state = None
+
+    def __repr__(self):
+        if self.state:
+            return '<Joint {} [{}] [{}]>'.format(self.name.title(), self.state, self.tracking)
+        else:
+            return '<Joint {} [{}]>'.format(self.name.title(), self.tracking)
