@@ -3,29 +3,32 @@ import numpy as np
 import ctypes
 
 
-F_SENSOR_COLOR   = 0x00000001
-F_SENSOR_DEPTH   = 0x00000010
-F_SENSOR_IR      = 0x00000100
-F_SENSOR_BODY    = 0x00001000
-F_SENSOR_MULTI   = 0x00001111
-F_SENSOR_AUDIO   = 0x00010000
-F_MAP_COLOR_CAM  = 0x00000002
-COLOR_WIDTH      = 1920
-COLOR_HEIGHT     = 1080
-COLOR_CHANNELS   = 4
-DEPTH_WIDTH      = 512
-DEPTH_HEIGHT     = 424
-IR_WIDTH         = 512
-IR_HEIGHT        = 424
-MAX_SUBFRAMES    = 8
-SUBFRAME_SIZE    = 256
-AUDIO_BUF_LEN    = 512
-SUBFRAME_SIZE    = 256
-MAX_BODIES       = 6
-BODY_PROPS       = 15
-MAX_JOINTS       = 25
-JOINT_PROPS      = 9
-FLOAT_MULT       = 100000
+F_SENSOR_COLOR    = 0x00000001
+F_SENSOR_DEPTH    = 0x00000010
+F_SENSOR_IR       = 0x00000100
+F_SENSOR_BODY     = 0x00001000
+F_SENSOR_MULTI    = 0x00001111
+F_SENSOR_AUDIO    = 0x00010000
+F_MAP_COLOR_CAM   = 0x00000002
+F_MAP_DEPTH_CAM   = 0x00000020
+F_MAP_DEPTH_COLOR = 0x00000200
+F_MAP_COLOR_DEPTH = 0x00002000
+COLOR_WIDTH       = 1920
+COLOR_HEIGHT      = 1080
+COLOR_CHANNELS    = 4
+DEPTH_WIDTH       = 512
+DEPTH_HEIGHT      = 424
+IR_WIDTH          = 512
+IR_HEIGHT         = 424
+MAX_SUBFRAMES     = 8
+SUBFRAME_SIZE     = 256
+AUDIO_BUF_LEN     = 512
+SUBFRAME_SIZE     = 256
+MAX_BODIES        = 6
+BODY_PROPS        = 15
+MAX_JOINTS        = 25
+JOINT_PROPS       = 9
+FLOAT_MULT        = 100000
 
 
 JOINT_MAP = {
@@ -102,6 +105,15 @@ def init_lib():
     kinectDLL.get_map_color_to_camera.argtypes = [np.ctypeslib.ndpointer(dtype=np.float32)]
     kinectDLL.get_map_color_to_camera.restype = ctypes.c_bool
 
+    kinectDLL.get_map_depth_to_camera.argtypes = [np.ctypeslib.ndpointer(dtype=np.float32)]
+    kinectDLL.get_map_depth_to_camera.restype = ctypes.c_bool
+
+    kinectDLL.get_map_depth_to_color.argtypes = [np.ctypeslib.ndpointer(dtype=np.float32)]
+    kinectDLL.get_map_depth_to_color.restype = ctypes.c_bool
+
+    kinectDLL.get_map_color_depth.argtypes = [np.ctypeslib.ndpointer(dtype=np.float32)]
+    kinectDLL.get_map_color_depth.restype = ctypes.c_bool
+
     return kinectDLL
 
 
@@ -123,6 +135,12 @@ class Kinect2:
             self.sensor_flags |= F_SENSOR_AUDIO
         if ('color', 'camera') in use_mappings:
             self.mapping_flags |= F_MAP_COLOR_CAM
+        if ('depth', 'camera') in use_mappings:
+            self.mapping_flags |= F_MAP_DEPTH_CAM
+        if ('depth', 'color') in use_mappings:
+            self.mapping_flags |= F_MAP_DEPTH_COLOR
+        if ('color', 'depth') in use_mappings:
+            self.mapping_flags |= F_MAP_COLOR_DEPTH
 
     def connect(self):
         if not self._kinect.init_kinect(self.sensor_flags, self.mapping_flags):
@@ -187,6 +205,18 @@ class Kinect2:
         if from_type == 'color' and to_type == 'camera':
             map_ary = np.empty((COLOR_HEIGHT, COLOR_WIDTH, 3), np.float32)
             if self._kinect.get_map_color_to_camera(map_ary):
+                result = map_ary
+        elif from_type == 'depth' and to_type == 'camera':
+            map_ary = np.empty((DEPTH_HEIGHT, DEPTH_WIDTH, 3), np.float32)
+            if self._kinect.get_map_depth_to_camera(map_ary):
+                result = map_ary
+        elif from_type == 'depth' and to_type == 'color':
+            map_ary = np.empty((DEPTH_HEIGHT, DEPTH_WIDTH, 2), np.float32)
+            if self._kinect.get_map_depth_to_color(map_ary):
+                result = map_ary
+        elif from_type == 'color' and to_type == 'depth':
+            map_ary = np.empty((COLOR_HEIGHT, COLOR_WIDTH, 2), np.float32)
+            if self._kinect.get_map_color_depth(map_ary):
                 result = map_ary
         return result
         

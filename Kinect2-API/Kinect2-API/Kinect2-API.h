@@ -29,3 +29,6 @@ EXPORTFUNC bool get_depth_data(UINT16* array);
 EXPORTFUNC bool get_body_data(UINT8* body_array, INT32* joint_array);
 EXPORTFUNC int get_audio_data(FLOAT* array, FLOAT* meta_array);
 EXPORTFUNC bool get_map_color_to_camera(FLOAT* array);
+EXPORTFUNC bool get_map_depth_to_camera(FLOAT* array);
+EXPORTFUNC bool get_map_depth_to_color(FLOAT* array);
+EXPORTFUNC bool get_map_color_depth(FLOAT* array);

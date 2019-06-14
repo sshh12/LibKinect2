@@ -6,29 +6,32 @@
 #include <mutex>
 
 
-#define WORKER_TIMEOUT   5000
-#define F_SENSOR_COLOR   0x00000001
-#define F_SENSOR_DEPTH   0x00000010
-#define F_SENSOR_IR      0x00000100
-#define F_SENSOR_BODY    0x00001000
-#define F_SENSOR_MULTI   0x00001111
-#define F_SENSOR_AUDIO   0x00010000
-#define F_MAP_COLOR_CAM  0x00000002
-#define COLOR_WIDTH      1920
-#define COLOR_HEIGHT     1080
-#define COLOR_CHANNELS   4
-#define DEPTH_WIDTH      512
-#define DEPTH_HEIGHT     424
-#define IR_WIDTH         512
-#define IR_HEIGHT        424
-#define MAX_SUBFRAMES    8
-#define AUDIO_BUF_LEN    512
-#define SUBFRAME_SIZE    256
-#define MAX_BODIES       6
-#define BODY_PROPS       15
-#define MAX_JOINTS       25
-#define JOINT_PROPS      9
-#define FLOAT_MULT       100000
+#define WORKER_TIMEOUT     5000
+#define F_SENSOR_COLOR     0x00000001
+#define F_SENSOR_DEPTH     0x00000010
+#define F_SENSOR_IR        0x00000100
+#define F_SENSOR_BODY      0x00001000
+#define F_SENSOR_MULTI     0x00001111
+#define F_SENSOR_AUDIO     0x00010000
+#define F_MAP_COLOR_CAM    0x00000002
+#define F_MAP_DEPTH_CAM    0x00000020
+#define F_MAP_DEPTH_COLOR  0x00000200
+#define F_MAP_COLOR_DEPTH  0x00002000
+#define COLOR_WIDTH        1920
+#define COLOR_HEIGHT       1080
+#define COLOR_CHANNELS     4
+#define DEPTH_WIDTH        512
+#define DEPTH_HEIGHT       424
+#define IR_WIDTH           512
+#define IR_HEIGHT          424
+#define MAX_SUBFRAMES      8
+#define AUDIO_BUF_LEN      512
+#define SUBFRAME_SIZE      256
+#define MAX_BODIES         6
+#define BODY_PROPS         15
+#define MAX_JOINTS         25
+#define JOINT_PROPS        9
+#define FLOAT_MULT         100000
 
 
 int                      sensors = 0;
@@ -49,7 +52,10 @@ INT32                    buffer_joints[MAX_BODIES * MAX_JOINTS * JOINT_PROPS];
 ICoordinateMapper*       coord_mapper;
 std::mutex               buffer_multi_lock;
 
-CameraSpacePoint         map_color_camera[COLOR_HEIGHT * COLOR_WIDTH];
+CameraSpacePoint         map_color_camera[COLOR_WIDTH * COLOR_HEIGHT];
+CameraSpacePoint         map_depth_camera[DEPTH_WIDTH * DEPTH_HEIGHT];
+ColorSpacePoint          map_depth_color[DEPTH_WIDTH * DEPTH_HEIGHT];
+DepthSpacePoint          map_color_depth[COLOR_WIDTH * COLOR_HEIGHT];
 
 IAudioBeamFrameReader*   audio_reader;
 WAITABLE_HANDLE          audio_frame_event;
@@ -199,8 +205,19 @@ HRESULT run_multi_worker() {
                     process_body(bodies[b_idx], b_idx, joints, joint_orients);
                 }
             }
-            if (mappings & F_MAP_COLOR_CAM && multi_tick > 5) {
-                coord_mapper->MapColorFrameToCameraSpace(DEPTH_HEIGHT * DEPTH_WIDTH, buffer_depth, COLOR_HEIGHT * COLOR_WIDTH, map_color_camera);
+            if (multi_tick > 1 && sensors & F_SENSOR_DEPTH) {
+                if (mappings & F_MAP_COLOR_CAM && sensors & F_SENSOR_COLOR) {
+                    coord_mapper->MapColorFrameToCameraSpace(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth, COLOR_WIDTH * COLOR_HEIGHT, map_color_camera);
+                }
+                if (mappings & F_MAP_DEPTH_CAM) {
+                    coord_mapper->MapDepthFrameToCameraSpace(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth, DEPTH_WIDTH * DEPTH_HEIGHT, map_depth_camera);
+                }
+                if (mappings & F_MAP_DEPTH_COLOR && sensors & F_SENSOR_COLOR) {
+                    coord_mapper->MapDepthFrameToColorSpace(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth, DEPTH_WIDTH * DEPTH_HEIGHT, map_depth_color);
+                }
+                if (mappings & F_MAP_COLOR_DEPTH && sensors & F_SENSOR_COLOR) {
+                    coord_mapper->MapColorFrameToDepthSpace(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth, COLOR_WIDTH * COLOR_HEIGHT, map_color_depth);
+                }
             }
             worker_lock.unlock();
             buffer_multi_lock.unlock();
@@ -381,6 +398,30 @@ EXPORTFUNC int get_audio_data(FLOAT* array, FLOAT* meta_array) {
 EXPORTFUNC bool get_map_color_to_camera(FLOAT* array) {
     buffer_multi_lock.lock();
     memcpy(array, map_color_camera, COLOR_HEIGHT * COLOR_WIDTH * 3 * sizeof(FLOAT));
+    buffer_multi_lock.unlock();
+    return true;
+}
+
+
+EXPORTFUNC bool get_map_depth_to_camera(FLOAT* array) {
+    buffer_multi_lock.lock();
+    memcpy(array, map_depth_camera, DEPTH_HEIGHT * DEPTH_WIDTH * 3 * sizeof(FLOAT));
+    buffer_multi_lock.unlock();
+    return true;
+}
+
+
+EXPORTFUNC bool get_map_depth_to_color(FLOAT* array) {
+    buffer_multi_lock.lock();
+    memcpy(array, map_depth_color, DEPTH_HEIGHT * DEPTH_WIDTH * 2 * sizeof(FLOAT));
+    buffer_multi_lock.unlock();
+    return true;
+}
+
+
+EXPORTFUNC bool get_map_color_depth(FLOAT* array) {
+    buffer_multi_lock.lock();
+    memcpy(array, map_color_depth, COLOR_HEIGHT * COLOR_WIDTH * 2 * sizeof(FLOAT));
     buffer_multi_lock.unlock();
     return true;
 }
