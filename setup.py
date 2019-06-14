@@ -27,7 +27,7 @@ setup(
     name='libkinect2',
     version=get_version(),
     author='Shrivu Shankar',
-    url='https://github.com/sshh12/Kinect2-Python',
+    url='https://github.com/sshh12/LibKinect2',
     packages=find_packages(),
     package_data={
         'libkinect2': [

@@ -1,2 +1,2 @@
-# Kinect2-Python
+# LibKinect2
 TODO
