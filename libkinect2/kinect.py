@@ -1,3 +1,6 @@
+"""
+The Kinect2 class
+"""
 from .dll_lib import *
 import numpy as np
 

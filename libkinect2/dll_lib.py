@@ -2,6 +2,7 @@
 Code for interfacing with the compiled library.
 """
 from pkg_resources import resource_filename
+import numpy as np
 import ctypes
 
 ### Constants ###
