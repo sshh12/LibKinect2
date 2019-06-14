@@ -3,6 +3,7 @@ The Kinect2 class
 """
 from .dll_lib import *
 import numpy as np
+import cv2
 
 
 class Kinect2:
@@ -38,10 +39,17 @@ class Kinect2:
     def disconnect(self):
         self._kinect.close_kinect()
 
-    def get_color_image(self):
+    def get_color_image(self, color_format='bgr'):
         color_ary = np.empty((COLOR_HEIGHT, COLOR_WIDTH, COLOR_CHANNELS), np.uint8)
         if self._kinect.get_color_data(color_ary):
-            return color_ary
+            if color_format == 'rgba':
+                return color_ary
+            elif color_format == 'bgr':
+                return cv2.cvtColor(color_ary, cv2.COLOR_RGBA2BGR)
+            elif color_format == 'rgb':
+                return cv2.cvtColor(color_ary, cv2.COLOR_RGBA2RGB)
+            else:
+                raise NotImplementedError()
         return None
 
     def get_ir_image(self):
