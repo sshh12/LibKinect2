@@ -40,13 +40,16 @@ BODY_EDGES = [
 ]
 
 
-def draw_skeleton(color_img, body, color=(0, 255, 0)):
+def draw_skeleton(color_img, body, color=(0, 255, 0), allow_inferred=False):
     """
     Draw skeleton onto `color_img` (an array of shape (height, width, colors))
     using joints from `body`.
     """
     for part_a, part_b in BODY_EDGES:
-        cv2.line(color_img, body[part_a].color_pos, body[part_b].color_pos, color, 2)
+        joint_a = body[part_a]
+        joint_b = body[part_b]
+        if allow_inferred or (joint_a.tracking == 'tracked' and joint_b.tracking == 'tracked'):
+            cv2.line(color_img, body[part_a].color_pos, body[part_b].color_pos, color, 2)
 
 
 def depth_map_to_image(depth_map):
@@ -61,3 +64,17 @@ def depth_map_to_image(depth_map):
     img[:, :, 1] = 150 + normalized_map * 100
     img[:, :, 2] = 150 + normalized_map * 100
     return cv2.cvtColor(img.astype(np.uint8), cv2.COLOR_HSV2BGR)
+
+
+def ir_to_image(ir_image):
+    """
+    Convert `ir_image` to a multicolor image
+    for visualization.
+    """
+    h, w, _ = ir_image.shape
+    img = np.empty((h, w, 3))
+    normalized_img = (ir_image[:, :, 0] / 65535.0)
+    img[:, :, 0] = normalized_img * 255
+    img[:, :, 1] = normalized_img * 255
+    img[:, :, 2] = normalized_img * 255
+    return img.astype(np.uint8)
