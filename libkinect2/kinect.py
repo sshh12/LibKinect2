@@ -182,13 +182,16 @@ class Kinect2:
                 result = map_ary
         return result
 
-    def wait_for_worker(self, first_tick=0):
+    def wait_for_worker(self, first_tick=0, timeout=5):
         """
         Wait for the frame fetching working to collect
         the first frame.
         """
+        start = time.time()
         while self._kinect.get_tick() == first_tick:
             time.sleep(0.1)
+            if time.time() - start >= timeout:
+                raise IOError('Kinect took too long. Try restarting the device.')
 
     def iter_frames(self):
         """

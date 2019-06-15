@@ -54,12 +54,16 @@ UINT16                   buffer_ir[IR_WIDTH * IR_HEIGHT];
 UINT8                    buffer_bodies[MAX_BODIES * BODY_PROPS];
 INT32                    buffer_joints[MAX_BODIES * MAX_JOINTS * JOINT_PROPS];
 ICoordinateMapper*       coord_mapper;
-std::mutex               buffer_multi_lock;
+std::mutex               buffer_color_lock;
+std::mutex               buffer_depth_lock;
+std::mutex               buffer_ir_lock;
+std::mutex               buffer_body_lock;
 
 CameraSpacePoint         map_color_camera[COLOR_WIDTH * COLOR_HEIGHT];
 CameraSpacePoint         map_depth_camera[DEPTH_WIDTH * DEPTH_HEIGHT];
 ColorSpacePoint          map_depth_color[DEPTH_WIDTH * DEPTH_HEIGHT];
 DepthSpacePoint          map_color_depth[COLOR_WIDTH * COLOR_HEIGHT];
+std::mutex               buffer_map_lock;
 
 IAudioBeamFrameReader*   audio_reader;
 WAITABLE_HANDLE          audio_frame_event;
@@ -195,38 +199,56 @@ HRESULT run_multi_worker() {
         DWORD result = WaitForMultipleObjects(_countof(handles), handles, FALSE, WORKER_TIMEOUT);
         if (result == WAIT_OBJECT_0) {
 
+            // std::cout << "[worker_start]\n";
             multi_reader->GetMultiSourceFrameArrivedEventData(multi_frame_event, &multi_event_args);
             multi_event_args->get_FrameReference(&multi_ref);
             multi_ref->AcquireFrame(&multi_frame);
-            buffer_multi_lock.lock();
             worker_lock.lock();
 
             if (sensors & F_SENSOR_COLOR) {
+                // std::cout << "[color_start]\n";
                 multi_frame->get_ColorFrameReference(&frameref_color);
-                frameref_color->AcquireFrame(&frame_color);
-                frame_color->CopyConvertedFrameDataToArray(COLOR_WIDTH * COLOR_HEIGHT * COLOR_CHANNELS, buffer_color, ColorImageFormat_Rgba);
-            }
-            if (sensors & F_SENSOR_DEPTH) {
-                multi_frame->get_DepthFrameReference(&frameref_depth);
-                frameref_depth->AcquireFrame(&frame_depth);
-                frame_depth->CopyFrameDataToArray(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth);
-            }
-            if (sensors & F_SENSOR_IR) {
-                multi_frame->get_InfraredFrameReference(&frameref_ir);
-                frameref_ir->AcquireFrame(&frame_ir);
-                frame_ir->CopyFrameDataToArray(IR_WIDTH * IR_HEIGHT, buffer_ir);
-            }
-            if (sensors & F_SENSOR_BODY) {
-                multi_frame->get_BodyFrameReference(&frameref_body);
-                frameref_body->AcquireFrame(&frame_body);
-                frame_body->GetAndRefreshBodyData(_countof(bodies), bodies);
-                for (int b_idx = 0; b_idx < BODY_COUNT; b_idx++) {
-                    process_body(bodies[b_idx], b_idx, joints, joint_orients);
+                if (SUCCEEDED(frameref_color->AcquireFrame(&frame_color))) {
+                    buffer_color_lock.lock();
+                    frame_color->CopyConvertedFrameDataToArray(COLOR_WIDTH * COLOR_HEIGHT * COLOR_CHANNELS, buffer_color, ColorImageFormat_Rgba);
+                    buffer_color_lock.unlock();
                 }
             }
+            if (sensors & F_SENSOR_DEPTH) {
+                // std::cout << "[depth_start]\n";
+                multi_frame->get_DepthFrameReference(&frameref_depth);
+                if (SUCCEEDED(frameref_depth->AcquireFrame(&frame_depth))) {
+                    buffer_depth_lock.lock();
+                    frame_depth->CopyFrameDataToArray(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth);
+                    buffer_depth_lock.unlock();
+                }
+            }
+            if (sensors & F_SENSOR_IR) {
+                // std::cout << "[ir_start]\n";
+                multi_frame->get_InfraredFrameReference(&frameref_ir);
+                if (SUCCEEDED(frameref_ir->AcquireFrame(&frame_ir))) {
+                    buffer_ir_lock.lock();
+                    frame_ir->CopyFrameDataToArray(IR_WIDTH * IR_HEIGHT, buffer_ir);
+                    buffer_ir_lock.unlock();
+                }
+            }
+            if (sensors & F_SENSOR_BODY) {
+                // std::cout << "[body_start]\n";
+                multi_frame->get_BodyFrameReference(&frameref_body);
+                if (SUCCEEDED(frameref_body->AcquireFrame(&frame_body))) {
+                    frame_body->GetAndRefreshBodyData(_countof(bodies), bodies);
+                    buffer_body_lock.lock();
+                    for (int b_idx = 0; b_idx < BODY_COUNT; b_idx++) {
+                        process_body(bodies[b_idx], b_idx, joints, joint_orients);
+                    }
+                    buffer_body_lock.unlock();
+                }
+            }
+            // std::cout << "[worker_end]\n";
 
             // Mappings all require depth sensor and that this isnt the first frame.
             if (multi_tick > 1 && sensors & F_SENSOR_DEPTH) {
+                buffer_map_lock.lock();
                 if (mappings & F_MAP_COLOR_CAM && sensors & F_SENSOR_COLOR) {
                     coord_mapper->MapColorFrameToCameraSpace(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth, COLOR_WIDTH * COLOR_HEIGHT, map_color_camera);
                 }
@@ -239,10 +261,10 @@ HRESULT run_multi_worker() {
                 if (mappings & F_MAP_COLOR_DEPTH && sensors & F_SENSOR_COLOR) {
                     coord_mapper->MapColorFrameToDepthSpace(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth, COLOR_WIDTH * COLOR_HEIGHT, map_color_depth);
                 }
+                buffer_map_lock.unlock();
             }
 
             worker_lock.unlock();
-            buffer_multi_lock.unlock();
             multi_tick += 1;
             SAFE_RELEASE(frameref_color);
             SAFE_RELEASE(frame_color);
@@ -397,34 +419,34 @@ inline void process_audio_subframe(IAudioBeamSubFrame* subframe, int index) {
 
 
 EXPORTFUNC bool get_color_data(UINT8* array) {
-    buffer_multi_lock.lock();
+    buffer_color_lock.lock();
     memcpy(array, buffer_color, COLOR_WIDTH * COLOR_HEIGHT * COLOR_CHANNELS * sizeof(UINT8));
-    buffer_multi_lock.unlock();
+    buffer_color_lock.unlock();
     return true;
 }
 
 
 EXPORTFUNC bool get_ir_data(UINT16* array) {
-    buffer_multi_lock.lock();
+    buffer_ir_lock.lock();
     memcpy(array, buffer_ir, IR_WIDTH * IR_HEIGHT * sizeof(UINT16));
-    buffer_multi_lock.unlock();
+    buffer_ir_lock.unlock();
     return true;
 }
 
 
 EXPORTFUNC bool get_depth_data(UINT16* array) {
-    buffer_multi_lock.lock();
+    buffer_depth_lock.lock();
     memcpy(array, buffer_depth, DEPTH_WIDTH * DEPTH_HEIGHT * sizeof(UINT16));
-    buffer_multi_lock.unlock();
+    buffer_depth_lock.unlock();
     return true;
 }
 
 
 EXPORTFUNC bool get_body_data(UINT8* body_array, INT32* joint_array) {
-    buffer_multi_lock.lock();
+    buffer_body_lock.lock();
     memcpy(body_array, buffer_bodies, MAX_BODIES * BODY_PROPS * sizeof(UINT8));
     memcpy(joint_array, buffer_joints, MAX_BODIES * MAX_JOINTS * JOINT_PROPS * sizeof(INT32));
-    buffer_multi_lock.unlock();
+    buffer_body_lock.unlock();
     return true;
 }
 
@@ -444,32 +466,32 @@ EXPORTFUNC int get_audio_data(FLOAT* array, FLOAT* meta_array) {
 
 
 EXPORTFUNC bool get_map_color_to_camera(FLOAT* array) {
-    buffer_multi_lock.lock();
+    buffer_map_lock.lock();
     memcpy(array, map_color_camera, COLOR_HEIGHT * COLOR_WIDTH * 3 * sizeof(FLOAT));
-    buffer_multi_lock.unlock();
+    buffer_map_lock.unlock();
     return true;
 }
 
 
 EXPORTFUNC bool get_map_depth_to_camera(FLOAT* array) {
-    buffer_multi_lock.lock();
+    buffer_map_lock.lock();
     memcpy(array, map_depth_camera, DEPTH_HEIGHT * DEPTH_WIDTH * 3 * sizeof(FLOAT));
-    buffer_multi_lock.unlock();
+    buffer_map_lock.unlock();
     return true;
 }
 
 
 EXPORTFUNC bool get_map_depth_to_color(FLOAT* array) {
-    buffer_multi_lock.lock();
+    buffer_map_lock.lock();
     memcpy(array, map_depth_color, DEPTH_HEIGHT * DEPTH_WIDTH * 2 * sizeof(FLOAT));
-    buffer_multi_lock.unlock();
+    buffer_map_lock.unlock();
     return true;
 }
 
 
 EXPORTFUNC bool get_map_color_depth(FLOAT* array) {
-    buffer_multi_lock.lock();
+    buffer_map_lock.lock();
     memcpy(array, map_color_depth, COLOR_HEIGHT * COLOR_WIDTH * 2 * sizeof(FLOAT));
-    buffer_multi_lock.unlock();
+    buffer_map_lock.unlock();
     return true;
 }
