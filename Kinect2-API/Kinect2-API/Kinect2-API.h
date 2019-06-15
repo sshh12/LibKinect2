@@ -7,10 +7,12 @@
 #define SAFE_RELEASE(p) { if ( (p) ) { (p)->Release(); (p) = 0; } }
 
 
+EXPORTFUNC bool init_kinect(int sensor_flags, int mapping_flags);
+EXPORTFUNC void close_kinect();
+
 EXPORTFUNC void pause_worker();
 EXPORTFUNC void resume_worker();
 EXPORTFUNC int get_tick();
-
 
 HRESULT run_multi_worker();
 DWORD WINAPI multi_worker_wrapper(_In_ LPVOID lp_param);
@@ -21,8 +23,6 @@ DWORD WINAPI audio_worker_wrapper(_In_ LPVOID lp_param);
 inline void process_audio_subframe(IAudioBeamSubFrame* subframe, int index);
 
 
-EXPORTFUNC bool init_kinect(int sensor_flags, int mapping_flags);
-EXPORTFUNC void close_kinect();
 EXPORTFUNC bool get_color_data(UINT8* array);
 EXPORTFUNC bool get_ir_data(UINT16* array);
 EXPORTFUNC bool get_depth_data(UINT16* array);

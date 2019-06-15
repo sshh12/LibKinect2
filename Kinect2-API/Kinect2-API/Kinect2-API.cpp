@@ -7,6 +7,8 @@
 
 
 #define WORKER_TIMEOUT     5000
+
+// Flag Constants
 #define F_SENSOR_COLOR     0x00000001
 #define F_SENSOR_DEPTH     0x00000010
 #define F_SENSOR_IR        0x00000100
@@ -17,6 +19,8 @@
 #define F_MAP_DEPTH_CAM    0x00000020
 #define F_MAP_DEPTH_COLOR  0x00000200
 #define F_MAP_COLOR_DEPTH  0x00002000
+
+// Misc Constants
 #define COLOR_WIDTH        1920
 #define COLOR_HEIGHT       1080
 #define COLOR_CHANNELS     4
@@ -67,6 +71,9 @@ UINT32                   buffer_audio_used = 0;
 std::mutex               buffer_audio_lock;
 
 
+// Init the connection and workers
+// sensor_flags contains a combination of F_SENSOR_* constants
+// mapping_flags contains a combination of F_MAP_* constants
 EXPORTFUNC bool init_kinect(int sensor_flags, int mapping_flags) {
     if (!sensor_flags || FAILED(GetDefaultKinectSensor(&sensor))) {
         return false;
@@ -113,6 +120,7 @@ EXPORTFUNC bool init_kinect(int sensor_flags, int mapping_flags) {
 }
 
 
+// Close and clean all data related to the Kinect.
 EXPORTFUNC void close_kinect() {
     if (sensors & F_SENSOR_MULTI) {
         SetEvent(multi_terminate);
@@ -135,16 +143,19 @@ EXPORTFUNC void close_kinect() {
 }
 
 
+// Get the current frame # captured
 EXPORTFUNC int get_tick() {
     return multi_tick;
 }
 
 
+// Pause the multi worker
 EXPORTFUNC void pause_worker() {
     worker_lock.lock();
 }
 
 
+// Unpause the multi worker
 EXPORTFUNC void resume_worker() {
     worker_lock.unlock();
 }
@@ -157,9 +168,14 @@ DWORD WINAPI multi_worker_wrapper(_In_ LPVOID lp_param) {
 }
 
 
+// The multi worker.
+// Collects depth/color/ir/body/mapping data from the sensor
+// on a loop.
 HRESULT run_multi_worker() {
+
     bool running = true;
     HANDLE handles[] = { (HANDLE)multi_frame_event, multi_terminate };
+
     IMultiSourceFrameArrivedEventArgs* multi_event_args = NULL;
     IMultiSourceFrameReference* multi_ref = NULL;
     IMultiSourceFrame* multi_frame = NULL;
@@ -174,14 +190,17 @@ HRESULT run_multi_worker() {
     IBody* bodies[BODY_COUNT] = { 0 };
     Joint joints[MAX_JOINTS];
     JointOrientation joint_orients[MAX_JOINTS];
+
     while (running) {
         DWORD result = WaitForMultipleObjects(_countof(handles), handles, FALSE, WORKER_TIMEOUT);
         if (result == WAIT_OBJECT_0) {
+
             multi_reader->GetMultiSourceFrameArrivedEventData(multi_frame_event, &multi_event_args);
             multi_event_args->get_FrameReference(&multi_ref);
             multi_ref->AcquireFrame(&multi_frame);
             buffer_multi_lock.lock();
             worker_lock.lock();
+
             if (sensors & F_SENSOR_COLOR) {
                 multi_frame->get_ColorFrameReference(&frameref_color);
                 frameref_color->AcquireFrame(&frame_color);
@@ -205,6 +224,8 @@ HRESULT run_multi_worker() {
                     process_body(bodies[b_idx], b_idx, joints, joint_orients);
                 }
             }
+
+            // Mappings all require depth sensor and that this isnt the first frame.
             if (multi_tick > 1 && sensors & F_SENSOR_DEPTH) {
                 if (mappings & F_MAP_COLOR_CAM && sensors & F_SENSOR_COLOR) {
                     coord_mapper->MapColorFrameToCameraSpace(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth, COLOR_WIDTH * COLOR_HEIGHT, map_color_camera);
@@ -219,6 +240,7 @@ HRESULT run_multi_worker() {
                     coord_mapper->MapColorFrameToDepthSpace(DEPTH_WIDTH * DEPTH_HEIGHT, buffer_depth, COLOR_WIDTH * COLOR_HEIGHT, map_color_depth);
                 }
             }
+
             worker_lock.unlock();
             buffer_multi_lock.unlock();
             multi_tick += 1;
@@ -232,6 +254,7 @@ HRESULT run_multi_worker() {
             SAFE_RELEASE(frame_body);
             SAFE_RELEASE(multi_event_args);
             SAFE_RELEASE(multi_ref);
+
         }
         else {
             running = false;
@@ -241,7 +264,9 @@ HRESULT run_multi_worker() {
 }
 
 
+// Read/store all the info related to each tracked body.
 inline void process_body(IBody* body, int body_idx, Joint* joints, JointOrientation* joint_orients) {
+
     BOOLEAN tracked;
     int body_offset = body_idx * BODY_PROPS;
     int joint_offset;
@@ -250,9 +275,13 @@ inline void process_body(IBody* body, int body_idx, Joint* joints, JointOrientat
     CameraSpacePoint joint_pos;
     ColorSpacePoint color_pos;
     DepthSpacePoint depth_pos;
+
     body->get_IsTracked(&tracked);
     buffer_bodies[body_offset] = !!tracked;
+
     if (tracked) {
+
+        // Store results directly into body buffer
         body->get_Engaged((DetectionResult*)&buffer_bodies[body_offset + 1]);
         body->get_IsRestricted((BOOLEAN*)&buffer_bodies[body_offset + 2]);
         body->get_HandLeftConfidence((TrackingConfidence*)&buffer_bodies[body_offset + 3]);
@@ -264,13 +293,16 @@ inline void process_body(IBody* body, int body_idx, Joint* joints, JointOrientat
         body->GetAppearanceDetectionResults(1, (DetectionResult*)&buffer_bodies[body_offset + 7 + 2 + 5]);
         body->GetJoints(MAX_JOINTS, joints);
         body->GetJointOrientations(MAX_JOINTS, joint_orients);
+
         for (int j_idx = 0; j_idx < MAX_JOINTS; j_idx++) {
+
             joint_offset = body_idx * MAX_JOINTS * JOINT_PROPS + j_idx * JOINT_PROPS;
             joint = joints[j_idx];
             joint_orient = joint_orients[j_idx].Orientation;
             joint_pos = joint.Position;
             coord_mapper->MapCameraPointToColorSpace(joint_pos, &color_pos);
             coord_mapper->MapCameraPointToDepthSpace(joint_pos, &depth_pos);
+
             buffer_joints[joint_offset] = joint.TrackingState;
             buffer_joints[joint_offset + 1] = (int)color_pos.X;
             buffer_joints[joint_offset + 2] = (int)color_pos.Y;
@@ -280,7 +312,9 @@ inline void process_body(IBody* body, int body_idx, Joint* joints, JointOrientat
             buffer_joints[joint_offset + 6] = (int)(joint_orient.x * FLOAT_MULT);
             buffer_joints[joint_offset + 7] = (int)(joint_orient.y * FLOAT_MULT);
             buffer_joints[joint_offset + 8] = (int)(joint_orient.z * FLOAT_MULT);
+
         }
+
     }
 }
 
@@ -292,39 +326,52 @@ DWORD WINAPI audio_worker_wrapper(_In_ LPVOID lp_param) {
 }
 
 
+// The audio worker.
 HRESULT run_audio_worker() {
+
     bool running = true;
     HANDLE handles[] = { (HANDLE)audio_frame_event, audio_terminate };
+
     IAudioBeamFrameArrivedEventArgs* audio_frame_event_args = NULL;
     IAudioBeamFrameReference* audio_frame_ref = NULL;
     IAudioBeamFrameList* audio_frames = NULL;
     IAudioBeamFrame* audio_frame = NULL;
     IAudioBeamSubFrame* subframe = NULL;
     UINT32 subframe_count;
+
     while (running) {
         DWORD result = WaitForMultipleObjects(_countof(handles), handles, FALSE, WORKER_TIMEOUT);
         if (result == WAIT_OBJECT_0) {
+
             audio_reader->GetFrameArrivedEventData(audio_frame_event, &audio_frame_event_args);
             audio_frame_event_args->get_FrameReference(&audio_frame_ref);
             if (SUCCEEDED(audio_frame_ref->AcquireBeamFrames(&audio_frames))) {
+
                 audio_frames->OpenAudioBeamFrame(0, &audio_frame);
                 audio_frame->get_SubFrameCount(&subframe_count);
                 buffer_audio_lock.lock();
+
+                // Reset buffer if this next audio frame will overload it.
                 if (subframe_count + buffer_audio_used >= AUDIO_BUF_LEN) {
                     buffer_audio_used = 0;
                 }
+
                 for (UINT32 i = 0; i < subframe_count; i++) {
                     audio_frame->GetSubFrame(i, &subframe);
                     process_audio_subframe(subframe, i);
                     SAFE_RELEASE(subframe);
                 }
+
                 buffer_audio_used += subframe_count;
                 buffer_audio_lock.unlock();
+
             } 
+
             SAFE_RELEASE(audio_frame_event_args);
             SAFE_RELEASE(audio_frame_ref);
             SAFE_RELEASE(audio_frames);
             SAFE_RELEASE(audio_frame);
+
         }
         else {
             running = false;
@@ -334,6 +381,7 @@ HRESULT run_audio_worker() {
 }
 
 
+// Extract beam angle and sample data from subframe.
 inline void process_audio_subframe(IAudioBeamSubFrame* subframe, int index) {
     float* audio_buf = NULL;
     float beam_angle;
