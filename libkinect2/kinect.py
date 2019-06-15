@@ -3,6 +3,7 @@ The Kinect2 class
 """
 from .dll_lib import *
 import numpy as np
+import time
 import cv2
 
 
@@ -180,6 +181,35 @@ class Kinect2:
             if self._kinect.get_map_color_depth(map_ary):
                 result = map_ary
         return result
+
+    def wait_for_worker(self, first_tick=0):
+        """
+        Wait for the frame fetching working to collect
+        the first frame.
+        """
+        while self._kinect.get_tick() == first_tick:
+            time.sleep(0.1)
+
+    def iter_frames(self):
+        """
+        Iterate through sensor data.
+
+        Returns:
+            array of each type of data being collected.
+        """
+        i = 0
+        while True:
+            data = [i]
+            if self.sensor_flags & F_SENSOR_COLOR:
+                data.append(self.get_color_image())
+            if self.sensor_flags & F_SENSOR_DEPTH:
+                data.append(self.get_depth_map())
+            if self.sensor_flags & F_SENSOR_IR:
+                data.append(self.get_ir_image())
+            if self.sensor_flags & F_SENSOR_BODY:
+                data.append(self.get_bodies())
+            yield data
+            i += 1
         
 
 class Body:
