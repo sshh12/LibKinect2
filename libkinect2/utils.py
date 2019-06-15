@@ -78,3 +78,10 @@ def ir_to_image(ir_image):
     img[:, :, 1] = normalized_img * 255
     img[:, :, 2] = normalized_img * 255
     return img.astype(np.uint8)
+
+
+def dist(pos_a, pos_b):
+    """
+    Distance between two points
+    """
+    return int(((pos_a[0] - pos_b[0])**2 + (pos_a[1] - pos_b[1])**2)**0.5)

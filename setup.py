@@ -31,7 +31,8 @@ setup(
     packages=find_packages(),
     package_data={
         'libkinect2': [
-            'data/Kinect2-API.dll'
+            'data/Kinect2-API.dll',
+            'data/shape_predictor_68_face_landmarks.dat'
         ]
     },
     license='MIT'

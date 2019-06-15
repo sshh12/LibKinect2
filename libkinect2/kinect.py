@@ -2,6 +2,7 @@
 The Kinect2 class
 """
 from .dll_lib import *
+from .body import Body, Joint
 import numpy as np
 import time
 import cv2
@@ -211,122 +212,13 @@ class Kinect2:
                 data.append(self.get_ir_image())
             if self.sensor_flags & F_SENSOR_BODY:
                 data.append(self.get_bodies())
+            if self.mapping_flags & F_MAP_COLOR_CAM:
+                data.append(self.map('color', 'camera'))
+            if self.mapping_flags & F_MAP_DEPTH_CAM:
+                data.append(self.map('depth', 'camera'))
+            if self.mapping_flags & F_MAP_DEPTH_COLOR:
+                data.append(self.map('depth', 'color'))
+            if self.mapping_flags & F_MAP_COLOR_DEPTH:
+                data.append(self.map('color', 'depth'))
             yield data
             i += 1
-        
-
-class Body:
-    """
-    A body tracked by the Kinect.
-
-    Attributes:
-        idx: The tracking index
-        tracked: If this body is tracked
-        engaged: State of person's engagement
-        restricted: If the body is restricted
-    """
-    def __init__(self, idx, body_ary, joints_ary):
-        """
-        Create a body from raw body/joint data.
-
-        Note:
-            Should not be called by user.
-            Use `kinect.get_bodies()`.
-        """
-        self.idx = idx
-        self._body_ary = body_ary
-        self._joints_ary = joints_ary
-        self._load_props()
-
-    def _load_props(self):
-        self.tracked = bool(self._body_ary[0])
-        self.engaged = DETECTION_MAP[self._body_ary[1]]
-        self.restricted = bool(self._body_ary[2])
-        ## These are not yet supported by Kinect2 )':
-        ## self.neutral = DETECTION_MAP[self._body_ary[7]]
-        ## self.happy = DETECTION_MAP[self._body_ary[8]]
-        ## self.looking_away = DETECTION_MAP[self._body_ary[13]]
-        ## self.glasses = DETECTION_MAP[self._body_ary[14]]
-
-    def keys(self):
-        """
-        Return a list of keys (joints).
-
-        Returns:
-            list of joint names
-        """
-        return JOINT_MAP.keys()
-
-    def __getitem__(self, joint_name):
-        """
-        Get a joint of this body by name.
-
-        Returns:
-            `Joint`
-
-        Note:
-            Use `body.keys()` for list of joints.
-        """
-        joint_idx = JOINT_MAP[joint_name.lower()]
-        if joint_idx == -1:
-            raise NotImplementedError()
-        return Joint(joint_name, self._body_ary, self._joints_ary[joint_idx])
-
-    def __repr__(self):
-        if self.tracked:
-            state = ' [Tracked]'
-        else:
-            state = ''
-        return '<Body ({}){}>'.format(self.idx, state)
-
-
-class Joint:
-    """
-    A joint.
-
-    Attributes:
-        name: Name of the joint
-        tracking: The current tracking state
-        color_pos: Position in the color camera space - (x, y)
-        depth_pos: Position in the depth sensor space - (x, y)
-        orientation: Orientation as (w, x, y, z)
-        state: The state of the joint if provided by Kinect API
-    """
-    def __init__(self, joint_name, body_ary, joint_ary):
-        """
-        Create a joint from raw body/joint data.
-
-        Note:
-            Should not be called by user.
-            Use `body[joint_name]`.
-        """
-        self.name = joint_name
-        self._body_ary = body_ary
-        self._joint_ary = joint_ary
-        self._load_props()
-    
-    def _load_props(self):
-        self.tracking = TRACKING_MAP[self._joint_ary[0]]
-        self.color_pos = (self._joint_ary[1], self._joint_ary[2])
-        self.depth_pos = (self._joint_ary[3], self._joint_ary[4])
-        self.orientation = (
-            self._joint_ary[5] / FLOAT_MULT,
-            self._joint_ary[6] / FLOAT_MULT,
-            self._joint_ary[7] / FLOAT_MULT,
-            self._joint_ary[8] / FLOAT_MULT
-        )
-        if self.name == 'hand_left':
-            self.confidence = HIGH_CONFIDENCE_MAP[self._body_ary[3]]
-            self.state = HAND_MAP[self._body_ary[4]]
-        elif self.name == 'hand_right':
-            self.confidence = HIGH_CONFIDENCE_MAP[self._body_ary[5]]
-            self.state = HAND_MAP[self._body_ary[6]]
-        else:
-            self.confidence = None
-            self.state = None
-
-    def __repr__(self):
-        if self.state:
-            return '<Joint {} [{}] [{}]>'.format(self.name.title(), self.state, self.tracking)
-        else:
-            return '<Joint {} [{}]>'.format(self.name.title(), self.tracking)
