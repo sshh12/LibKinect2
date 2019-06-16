@@ -1,6 +1,7 @@
 """
 Helpful functions.
 """
+from .audio import AudioFrame
 import numpy as np
 import cv2
 
@@ -85,3 +86,14 @@ def dist(pos_a, pos_b):
     Distance between two points
     """
     return int(((pos_a[0] - pos_b[0])**2 + (pos_a[1] - pos_b[1])**2)**0.5)
+
+
+def merge_audio_frames(audio_frames):
+    """
+    Merge `AudioFrame`s into a single `AudioFrame`
+    by combining / averaging data.
+    """
+    data = np.concatenate([frame.data for frame in audio_frames])
+    beam_angle = np.mean([frame.beam_angle for frame in audio_frames])
+    beam_conf = np.mean([frame.beam_conf for frame in audio_frames])
+    return AudioFrame(beam_angle, beam_conf, data)

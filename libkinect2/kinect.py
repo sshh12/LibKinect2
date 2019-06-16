@@ -3,6 +3,7 @@ The Kinect2 class
 """
 from .dll_lib import *
 from .body import Body, Joint
+from .audio import AudioFrame
 import numpy as np
 import time
 import cv2
@@ -48,6 +49,8 @@ class Kinect2:
             self.mapping_flags |= F_MAP_DEPTH_COLOR
         if ('color', 'depth') in use_mappings:
             self.mapping_flags |= F_MAP_COLOR_DEPTH
+        if self.sensor_flags == 0:
+            raise ValueError('At least one sensor must be provided.')
 
     def connect(self):
         """
@@ -133,7 +136,7 @@ class Kinect2:
 
     def _get_raw_audio(self):
         audio_ary = np.empty((AUDIO_BUF_LEN * SUBFRAME_SIZE), np.float32)
-        meta_ary = np.empty((AUDIO_BUF_LEN * 2,), np.float32)
+        meta_ary = np.empty((AUDIO_BUF_LEN, 2), np.float32)
         frame_cnt = self._kinect.get_audio_data(audio_ary, meta_ary)
         return frame_cnt, audio_ary, meta_ary
 
@@ -142,15 +145,15 @@ class Kinect2:
         Get the latest audio frames.
 
         Returns:
-            array of (angle, confidence, sample data)
+            array of `AudioFrame`
         """
         frame_cnt, audio_ary, meta_ary = self._get_raw_audio()
         frames = []
         for i in range(frame_cnt):
-            beam_angle = meta_ary[i*2]
-            beam_conf = meta_ary[i*2+1]
+            beam_angle = meta_ary[i, 0]
+            beam_conf = meta_ary[i, 1]
             samples = audio_ary[i*SUBFRAME_SIZE:(i+1)*SUBFRAME_SIZE]
-            frames.append((beam_angle, beam_conf, samples))
+            frames.append(AudioFrame(beam_angle, beam_conf, samples))
         return frames
 
     def map(self, from_type, to_type):
@@ -212,6 +215,8 @@ class Kinect2:
                 data.append(self.get_ir_image())
             if self.sensor_flags & F_SENSOR_BODY:
                 data.append(self.get_bodies())
+            if self.sensor_flags & F_SENSOR_AUDIO:
+                data.append(self.get_audio_frames())
             if self.mapping_flags & F_MAP_COLOR_CAM:
                 data.append(self.map('color', 'camera'))
             if self.mapping_flags & F_MAP_DEPTH_CAM:

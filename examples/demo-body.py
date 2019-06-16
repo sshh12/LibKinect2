@@ -13,6 +13,7 @@ kinect.wait_for_worker()
 
 
 def draw_hand(color_img, hand, wrist):
+    # Draw hand based on its state
     if hand.tracking == 'tracked' and wrist.tracking == 'tracked':
         size = dist(hand.color_pos, wrist.color_pos)
         if hand.state == 'closed':
@@ -22,6 +23,7 @@ def draw_hand(color_img, hand, wrist):
 
 
 def draw_face(color_img, face):
+    # Draw face with facial landmarks
     if face is not None:
         for i in range(68):
             x, y = face.points[i]

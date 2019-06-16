@@ -81,7 +81,7 @@ bool get_depth_data(UINT16* array);
 // (MAX_BODIES, BODY_PROPS) (MAX_BODIES, MAX_JOINTS, JOINT_PROPS)
 // See code for how this is encoded.
 bool get_body_data(UINT8* body_array, INT32* joint_array);
-// (AUDIO_BUF_LEN * SUBFRAME_SIZE) (AUDIO_BUF_LEN * 2,)
+// (AUDIO_BUF_LEN * SUBFRAME_SIZE) (AUDIO_BUF_LEN, 2)
 // See code for how this is encoded.
 int get_audio_data(FLOAT* array, FLOAT* meta_array);
 // (COLOR_HEIGHT, COLOR_WIDTH, 3)
