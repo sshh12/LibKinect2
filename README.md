@@ -7,11 +7,26 @@
 #### Install
 `TODO`
 
-#### API
-`TODO`
+#### Demos
 
-#### Demo
-`TODO`
+[Example Scripts](https://github.com/sshh12/LibKinect2/tree/master/examples)
+
+`TODO GIFS`
+
+#### Docs
+
+For python docs, run:
+```python
+from libkinect2 import Kinect2
+help(Kinect2)
+```
+
+[Other Docs](https://github.com/sshh12/LibKinect2/tree/master/Kinect2-API)
+
+## Issues
+
+I'm sure there are plenty of issues, so fill free to [create one](https://github.com/sshh12/LibKinect2/issues)
+or [fix one](https://github.com/sshh12/LibKinect2/pulls).
 
 ## Related
 

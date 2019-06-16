@@ -159,6 +159,15 @@ class Joint:
 class Face:
     """
     A person's face.
+
+    Attributes:
+        color_img: The original img this face was extracted from
+        head: The head `Joint` used
+        neck: The neck `Joint` used
+        pos: The postion of this face - (x, y)
+        exists: If this face was actual found / exists
+        rect: A rectangle bbox of the face
+        point: A numpy array containing 68 facial landmark positions
     """
     def __init__(self, color_img, head, neck):
         """

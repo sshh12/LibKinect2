@@ -8,6 +8,11 @@ import math
 class AudioFrame:
     """
     A frame of Audio
+
+    Attributes:
+        beam_angle: The audio angle in radians
+        beam_conf: The device's confidence in the beam angle
+        data: The raw sample data as a numpy array
     """
     def __init__(self, beam_angle, beam_conf, samples):
         """
