@@ -9,6 +9,30 @@
 
 #### Demos
 
+```python
+from libkinect2 import Kinect2
+from libkinect2.utils import depth_map_to_image
+import numpy as np
+import cv2
+
+# Init Kinect2 w/2 sensors
+kinect = Kinect2(use_sensors=['color', 'depth'])
+kinect.connect()
+kinect.wait_for_worker()
+
+for _, color_img, depth_map in kinect.iter_frames():
+    
+    # Display color and depth data
+    cv2.imshow('color', color_img)
+    cv2.imshow('depth', depth_map_to_image(depth_map))
+
+    key = cv2.waitKey(1) & 0xFF
+    if key == ord('q'):
+        break
+
+kinect.disconnect()
+```
+
 [Example Scripts](https://github.com/sshh12/LibKinect2/tree/master/examples)
 
 `TODO GIFS`
