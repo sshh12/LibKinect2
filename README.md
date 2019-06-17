@@ -5,7 +5,8 @@
 ## Usage
 
 #### Install (x64 Only)
-`TODO`
+
+`pip install https://github.com/sshh12/LibKinect2/releases/download/v0.1.0/libkinect2-0.1.0.tar.gz`
 
 #### Demos
 
