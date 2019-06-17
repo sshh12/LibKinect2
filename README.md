@@ -4,7 +4,7 @@
 
 ## Usage
 
-#### Install
+#### Install (x64 Only)
 `TODO`
 
 #### Demos
@@ -35,7 +35,10 @@ kinect.disconnect()
 
 [Example Scripts](https://github.com/sshh12/LibKinect2/tree/master/examples)
 
-`TODO GIFS`
+![cameras](https://user-images.githubusercontent.com/6625384/59576903-088db480-9087-11e9-96f6-251240d25f0c.gif)
+![body](https://user-images.githubusercontent.com/6625384/59576877-e8f68c00-9086-11e9-826b-eceb6eb80573.gif)
+![audio](https://user-images.githubusercontent.com/6625384/59576951-3672f900-9087-11e9-9c4d-aeebc676a500.gif)
+![mapper](https://user-images.githubusercontent.com/6625384/59576934-222efc00-9087-11e9-94cd-01e9cd634722.gif)
 
 #### Docs
 
