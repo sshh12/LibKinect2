@@ -197,15 +197,21 @@ class Kinect2:
             if time.time() - start >= timeout:
                 raise IOError('Kinect took too long. Try restarting the device.')
 
-    def iter_frames(self):
+    def iter_frames(self, limit_fps=60):
         """
         Iterate through sensor data.
+
+        Args:
+            limit_fps: Cap the framerate/datarate
 
         Returns:
             array of each type of data being collected.
         """
         i = 0
+        frame_time = 1.0 / limit_fps
+        start_time = time.time()
         while True:
+
             data = [i]
             if self.sensor_flags & F_SENSOR_COLOR:
                 data.append(self.get_color_image())
@@ -226,4 +232,11 @@ class Kinect2:
             if self.mapping_flags & F_MAP_COLOR_DEPTH:
                 data.append(self.map('color', 'depth'))
             yield data
+
+            end_time = time.time()
+            if start_time - end_time < frame_time:
+                time.sleep(frame_time - (start_time - end_time))
+                end_time = time.time()
+
+            start_time = end_time
             i += 1
